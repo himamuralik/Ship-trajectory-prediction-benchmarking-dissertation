@@ -5,10 +5,7 @@ from config import config
 
 class TrajectoryLoss:
     """
-    Base loss class for trajectory prediction models with:
-    - Primary Haversine distance loss
-    - Optional MSE auxiliary loss
-    - Support for normalized/denormalized coordinates
+    Base loss class for trajectory prediction models with standardized Haversine calculation.
     """
     
     def __init__(self, 
@@ -27,11 +24,8 @@ class TrajectoryLoss:
         self.use_mse = use_mse
         self.mse_weight = mse_weight
         self._requires_static_features = False
-        
-        # Constants
         self.EARTH_RADIUS = 6371.0  # km
-        self.pi = tf.constant(math.pi, dtype=tf.float32)
-        
+
     def _get_default_norm_factors(self) -> Dict:
         """Fallback normalization factors if none provided"""
         return {
@@ -45,6 +39,50 @@ class TrajectoryLoss:
     def requires_static_features(self) -> bool:
         """Whether this loss variant requires static features"""
         return self._requires_static_features
+
+    @tf.function
+    def _core_haversine(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+        """
+        Standardized Haversine distance calculation used by all subclasses.
+        """
+        # Input validation
+        tf.debugging.assert_shapes([
+            (y_true, (..., 2)),
+            (y_pred, (..., 2))
+        ])
+        
+        # Convert to radians
+        y_true_rad = tf.deg2rad(y_true)
+        y_pred_rad = tf.deg2rad(y_pred)
+        
+        # Haversine formula
+        dlat = y_pred_rad[..., 0] - y_true_rad[..., 0]
+        dlon = y_pred_rad[..., 1] - y_true_rad[..., 1]
+        
+        a = (tf.math.sin(dlat/2)**2 + 
+             tf.math.cos(y_true_rad[..., 0]) * tf.math.cos(y_pred_rad[..., 0]) * 
+             tf.math.sin(dlon/2)**2)
+        
+        # Numerical stability
+        a = tf.clip_by_value(a, 0.0, 1.0 - 1e-7)
+        
+        return self.EARTH_RADIUS * 2 * tf.math.asin(tf.math.sqrt(a))
+
+    @tf.function
+    def haversine_loss(self, 
+                      y_true: tf.Tensor, 
+                      y_pred: tf.Tensor,
+                      reduce_mean: bool = True) -> tf.Tensor:
+        """
+        Calculate Haversine distance with automatic denormalization.
+        """
+        # Denormalize if needed
+        if tf.reduce_max(y_true) <= 1.0 and tf.reduce_min(y_true) >= 0.0:
+            y_true = self._denormalize(y_true)
+            y_pred = self._denormalize(y_pred)
+            
+        distances = self._core_haversine(y_true, y_pred)
+        return tf.reduce_mean(distances) if reduce_mean else distances
 
     @tf.function
     def __call__(self, 
@@ -69,65 +107,17 @@ class TrajectoryLoss:
             return haversine_loss + self.mse_weight * mse_loss
         return haversine_loss
 
-    @tf.function
-    def haversine_loss(self, 
-                      y_true: tf.Tensor, 
-                      y_pred: tf.Tensor,
-                      reduce_mean: bool = True) -> tf.Tensor:
-        """
-        Calculate Haversine distance between predicted and true coordinates.
+    def _denormalize(self, coords: tf.Tensor) -> tf.Tensor:
+        """Convert normalized coordinates back to original scale.
         
         Args:
-            y_true: Ground truth coordinates [..., {lat, lon}]
-            y_pred: Predicted coordinates [..., {lat, lon}]
-            reduce_mean: Whether to reduce to mean loss or return per-sample
-            
+            coords: Normalized coordinates tensor of shape [..., 2] where:
+                coords[..., 0] = normalized latitude
+                coords[..., 1] = normalized longitude
+                
         Returns:
-            Haversine distance in kilometers
+            Denormalized coordinates tensor in original scale [..., 2]
         """
-        # Denormalize coordinates if they're normalized
-        if tf.reduce_max(y_true) <= 1.0 and tf.reduce_min(y_true) >= 0.0:
-            y_true = self._denormalize(y_true)
-            y_pred = self._denormalize(y_pred)
-        
-        # Convert to radians
-        y_true_rad = y_true * (self.pi / 180.0)
-        y_pred_rad = y_pred * (self.pi / 180.0)
-        
-        # Extract lat/lon components
-        lat_true = y_true_rad[..., 0]
-        lon_true = y_true_rad[..., 1]
-        lat_pred = y_pred_rad[..., 0]
-        lon_pred = y_pred_rad[..., 1]
-        
-        # Haversine formula
-        dlat = lat_pred - lat_true
-        dlon = lon_pred - lon_true
-        
-        a = (tf.math.sin(dlat/2)**2 + 
-             tf.math.cos(lat_true) * tf.math.cos(lat_pred) * 
-             tf.math.sin(dlon/2)**2
-        
-        # Clip to avoid numerical instability
-        a = tf.clip_by_value(a, 0.0, 1.0)
-        
-        distance = 2 * self.EARTH_RADIUS * tf.math.asin(tf.math.sqrt(a))
-        
-        if reduce_mean:
-            return tf.reduce_mean(distance)
-        return distance
-def _denormalize(self, coords: tf.Tensor) -> tf.Tensor:
-    """Convert normalized coordinates back to original scale.
-    
-    Args:
-        coords: Normalized coordinates tensor of shape [..., 2] where:
-            coords[..., 0] = normalized latitude
-            coords[..., 1] = normalized longitude
-            
-    Returns:
-        Denormalized coordinates tensor in original scale [..., 2]
-    """
-
         lat = coords[..., 0] * (self.norm_factors['lat']['max'] - 
                                self.norm_factors['lat']['min']) + \
               self.norm_factors['lat']['min']
