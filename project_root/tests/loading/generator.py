@@ -28,6 +28,13 @@ class DataGenerator(tf.keras.utils.Sequence):
             if isinstance(self.X_unified, tuple):
                 # Handle case where DiskArray has static features
                 self.X_unified, self.static_features = self.X_unified
+                 # Add the validation check here
+                 if X.static_features is not None:
+                if len(X.static_features) != len(self.X_unified):
+                    raise ValueError(
+                        f"Static features count ({len(X.static_features)}) "
+                        f"doesn't match main data ({len(self.X_unified)})"
+                    )
             else:
                 self.static_features = None
         else:
