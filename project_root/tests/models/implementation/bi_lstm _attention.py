@@ -165,25 +165,47 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
         )
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
-        """Forward pass with attention mechanism"""
-        x = inputs
-        
-        # Bi-LSTM processing (all layers return sequences)
-        for layer in self.bilstm_layers:
-            x = layer(x, training=training)
-        
-        # Attention mechanism
-        attention_scores = self.attention(x)  # (batch_size, seq_len, 1)
-        attention_weights = tf.nn.softmax(attention_scores, axis=1)
-        context_vector = tf.reduce_sum(attention_weights * x, axis=1)
-        context_vector = self.layer_norm(context_vector)
-        
-        # Dense processing
-        x = context_vector
-        for layer in self.dense_layers:
-            x = layer(x, training=training)
-        
-        return self.output_layer(x)
+    """Forward pass with attention mechanism"""
+    # Input validation (NEW)
+    if len(inputs.shape) != 3:
+        raise ValueError(
+            f"Input tensor must be 3D [batch, timesteps, features], got {inputs.shape}"
+        )
+    
+    x = inputs
+    
+    # Bi-LSTM processing
+    for layer in self.bilstm_layers:
+        x = layer(x, training=training)
+        # Add residual connection if needed (optional)
+        # x += inputs  # Skip connection
+    
+    # Attention mechanism (IMPROVED)
+    attention_scores = self.attention(x)  # [batch, seq_len, 1]
+    
+    # Add temperature scaling (NEW)
+    temperature = 1.0  # Can be made configurable
+    attention_scores = attention_scores / temperature
+    
+    attention_weights = tf.nn.softmax(attention_scores, axis=1)  # [batch, seq_len, 1]
+    
+    # Debug checks (optional)
+    tf.debugging.assert_near(
+        tf.reduce_sum(attention_weights, axis=1),
+        tf.ones_like(attention_weights[:, 0, :]),
+        message="Attention weights don't sum to 1"
+    )
+    
+    # Context vector calculation
+    context_vector = tf.reduce_sum(attention_weights * x, axis=1)  # [batch, features]
+    context_vector = self.layer_norm(context_vector)
+    
+    # Dense processing
+    x = context_vector
+    for layer in self.dense_layers:
+        x = layer(x, training=training)
+    
+    return self.output_layer(x)
 
     def predict(self, 
                x: np.ndarray,
