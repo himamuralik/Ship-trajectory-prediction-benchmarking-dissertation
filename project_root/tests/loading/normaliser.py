@@ -90,6 +90,9 @@ class Normalizer():
         :param normalization_factors: Normalization factors
         :return: Normalized data
         """
+        # Add static features validation here
+        if hasattr(X, 'static_features') and X.static_features is not None:
+            logging.info("Normalizer detected static features - these will not be normalized")
         if len(data.shape) == 3:
             for col in normalization_factors.values():
                 if col['idx'] < data.shape[-1]:
