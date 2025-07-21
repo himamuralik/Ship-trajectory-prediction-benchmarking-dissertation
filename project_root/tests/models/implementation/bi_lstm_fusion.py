@@ -197,46 +197,75 @@ class BiLSTMFusionModelRunner(ModelRunner):
             name='output'
         )(x)
 
-    def predict(self, 
-               valid_X_long_term: Tuple[np.ndarray, np.ndarray], 
-               valid_Y_long_term: np.ndarray = None,
-               args: object = None) -> Dict[str, Union[np.ndarray, float]]:
-        """
-        Make predictions with optional metrics calculation.
-        """
-        # Unpack inputs
-        recurrent_X, static_X = valid_X_long_term
+   def predict(self, 
+           valid_X_long_term: Tuple[np.ndarray, np.ndarray], 
+           valid_Y_long_term: np.ndarray = None,
+           args: object = None) -> Dict[str, Union[np.ndarray, float]]:
+    """
+    Make predictions with static feature validation
+    
+    Args:
+        valid_X_long_term: Tuple of (recurrent_features, static_features)
+        valid_Y_long_term: Optional ground truth
+        args: Additional arguments
         
-        # Make predictions (normalized space)
-        normalized_predictions = self.model.predict([recurrent_X, static_X])
-        
-        # Unnormalize predictions
-        predictions = Normalizer().unnormalize(
-            normalized_predictions, 
+    Returns:
+        Dictionary containing predictions and metrics
+    """
+    # --- Input Validation ---
+    recurrent_X, static_X = valid_X_long_term
+    
+    # Validate static features
+    if static_X.shape[1] != self.num_vessel_groups:
+        raise ValueError(
+            f"Static feature dimension mismatch. Expected {self.num_vessel_groups} "
+            f"vessel groups, got {static_X.shape[1]}. Check DataLoader configuration."
+        )
+    
+    # Validate recurrent features
+    if recurrent_X.shape[1] != self.ts_length:
+        raise ValueError(
+            f"Sequence length mismatch. Expected {self.ts_length} timesteps, "
+            f"got {recurrent_X.shape[1]}"
+        )
+    
+    if recurrent_X.shape[2] != self.input_num_recurrent_features:
+        raise ValueError(
+            f"Feature dimension mismatch. Expected {self.input_num_recurrent_features} "
+            f"features, got {recurrent_X.shape[2]}"
+        )
+
+    # --- Prediction Logic ---
+    normalized_predictions = self.model.predict(
+        [recurrent_X, static_X],
+        batch_size=args.batch_size if args else 32
+    )
+    
+    # --- Post-processing ---
+    predictions = Normalizer().unnormalize(
+        normalized_predictions, 
+        self.normalization_factors
+    )
+    
+    results = {
+        'predictions': predictions,
+        'normalized_predictions': normalized_predictions
+    }
+    
+    # --- Metrics Calculation (if ground truth provided) ---
+    if valid_Y_long_term is not None:
+        true_values = Normalizer().unnormalize(
+            valid_Y_long_term,
             self.normalization_factors
         )
         
-        results = {
-            'predictions': predictions,
-            'normalized_predictions': normalized_predictions
-        }
-        
-        # Calculate metrics if ground truth provided
-        if valid_Y_long_term is not None:
-            # Unnormalize ground truth
-            true_values = Normalizer().unnormalize(
-                valid_Y_long_term,
-                self.normalization_factors
-            )
-            
-            # Calculate metrics
-            results.update({
-                'haversine_distances': haversine_vector(true_values, predictions, Unit.KILOMETERS),
-                'mean_haversine': float(np.mean(haversine_vector(true_values, predictions, Unit.KILOMETERS))),
-                'mse': float(tf.keras.losses.mean_squared_error(valid_Y_long_term, normalized_predictions).numpy().mean())
-            })
-        
-        return results
+        results.update({
+            'haversine_distances': haversine_vector(true_values, predictions, Unit.KILOMETERS),
+            'mean_haversine': float(np.mean(haversine_vector(true_values, predictions, Unit.KILOMETERS))),
+            'mse': float(tf.keras.losses.mean_squared_error(valid_Y_long_term, normalized_predictions).numpy().mean())
+        })
+    
+    return results
 
     def evaluate(self, dataset: tf.data.Dataset) -> Dict[str, float]:
         """Comprehensive evaluation with Haversine and MSE metrics"""
