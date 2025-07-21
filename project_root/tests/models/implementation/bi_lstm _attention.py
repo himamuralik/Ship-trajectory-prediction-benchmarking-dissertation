@@ -1,15 +1,17 @@
 import tensorflow as tf
 from haversine import haversine_vector, Unit
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Union
 import numpy as np
 import os
+from models.implementation.losses import TrajectoryLoss, AttentionAwareLoss
 
 class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
     """
     Enhanced Bi-LSTM with Attention Model for Trajectory Prediction:
-    - Uses Haversine distance as primary loss function
-    - Maintains MSE for comparative analysis
+    - Uses standardized TrajectoryLoss with Haversine distance
+    - Supports attention-weighted loss when needed
     - Includes attention mechanism for temporal feature weighting
+    - Returns attention weights during prediction
     """
 
     def __init__(self,
@@ -28,12 +30,20 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
                  beta_2: float = None,
                  epsilon: float = None,
                  norm_factors: Dict[str, Dict[str, float]] = None,
+                 use_mse_loss: bool = False,
+                 mse_weight: float = 0.1,
+                 use_attention_loss: bool = False,
+                 attention_weight: float = 0.5,
                  **kwargs):
         """
         Args:
             norm_factors: Dictionary containing min/max values for denormalization
                          Format: {'lat': {'min': ..., 'max': ...}, 
                                  'lon': {'min': ..., 'max': ...}}
+            use_mse_loss: Whether to include MSE as auxiliary loss
+            mse_weight: Weight for MSE component in combined loss
+            use_attention_loss: Whether to use attention-aware loss
+            attention_weight: Weight for attention component in loss
         """
         super().__init__(**kwargs)
         
@@ -62,6 +72,21 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
         # Regularization config
         self.regularizer = self._get_regularizer(regularization, reg_coefficient)
 
+        # Loss configuration
+        if use_attention_loss:
+            self.loss_fn = AttentionAwareLoss(
+                normalization_factors=self.norm_factors,
+                use_mse=use_mse_loss,
+                mse_weight=mse_weight,
+                attention_weight=attention_weight
+            )
+        else:
+            self.loss_fn = TrajectoryLoss(
+                normalization_factors=self.norm_factors,
+                use_mse=use_mse_loss,
+                mse_weight=mse_weight
+            )
+
         # Build model layers
         self._build_layers()
         self._compile_model()
@@ -73,27 +98,6 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
         elif reg_type == 'l2':
             return tf.keras.regularizers.L2(coefficient)
         return None
-
-    @tf.function
-    def _haversine_loss(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
-        """Vectorized Haversine loss calculation"""
-        # Denormalize coordinates
-        lat_true = y_true[..., 0] * (self.norm_factors['lat']['max'] - self.norm_factors['lat']['min']) + self.norm_factors['lat']['min']
-        lon_true = y_true[..., 1] * (self.norm_factors['lon']['max'] - self.norm_factors['lon']['min']) + self.norm_factors['lon']['min']
-        lat_pred = y_pred[..., 0] * (self.norm_factors['lat']['max'] - self.norm_factors['lat']['min']) + self.norm_factors['lat']['min']
-        lon_pred = y_pred[..., 1] * (self.norm_factors['lon']['max'] - self.norm_factors['lon']['min']) + self.norm_factors['lon']['min']
-        
-        # Convert to radians
-        lat_true, lon_true, lat_pred, lon_pred = map(
-            tf.deg2rad, [lat_true, lon_true, lat_pred, lon_pred]
-        )
-        
-        # Haversine formula
-        dlat = lat_pred - lat_true
-        dlon = lon_pred - lon_true
-        a = tf.sin(dlat/2)**2 + tf.cos(lat_true) * tf.cos(lat_pred) * tf.sin(dlon/2)**2
-        c = 2 * tf.asin(tf.sqrt(a))
-        return 6371.0 * c  # Earth radius in km
 
     def _compile_model(self):
         """Configure training with Adam optimizer"""
@@ -108,8 +112,8 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
         
         self.compile(
             optimizer=tf.keras.optimizers.Adam(**optimizer_config),
-            loss=self._haversine_loss,
-            metrics=[self._haversine_loss, 'mse']
+            loss=self.loss_fn,
+            metrics=[self.loss_fn.haversine_loss, 'mse']
         )
 
     def _build_layers(self):
@@ -164,68 +168,80 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
             name='output'
         )
 
-    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
-    """Forward pass with attention mechanism"""
-    # Input validation (NEW)
-    if len(inputs.shape) != 3:
-        raise ValueError(
-            f"Input tensor must be 3D [batch, timesteps, features], got {inputs.shape}"
+    def call(self, inputs: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, tf.Tensor]:
+        """Forward pass that returns both predictions and attention weights"""
+        # Input validation
+        if len(inputs.shape) != 3:
+            raise ValueError(
+                f"Input tensor must be 3D [batch, timesteps, features], got {inputs.shape}"
+            )
+        
+        x = inputs
+        
+        # Bi-LSTM processing
+        for layer in self.bilstm_layers:
+            x = layer(x, training=training)
+        
+        # Attention mechanism
+        attention_scores = self.attention(x)  # [batch, seq_len, 1]
+        attention_weights = tf.nn.softmax(attention_scores, axis=1)  # [batch, seq_len, 1]
+        
+        # Debug checks (optional)
+        tf.debugging.assert_near(
+            tf.reduce_sum(attention_weights, axis=1),
+            tf.ones_like(attention_weights[:, 0, :]),
+            message="Attention weights don't sum to 1"
         )
-    
-    x = inputs
-    
-    # Bi-LSTM processing
-    for layer in self.bilstm_layers:
-        x = layer(x, training=training)
-        # Add residual connection if needed (optional)
-        # x += inputs  # Skip connection
-    
-    # Attention mechanism (IMPROVED)
-    attention_scores = self.attention(x)  # [batch, seq_len, 1]
-    
-    # Add temperature scaling (NEW)
-    temperature = 1.0  # Can be made configurable
-    attention_scores = attention_scores / temperature
-    
-    attention_weights = tf.nn.softmax(attention_scores, axis=1)  # [batch, seq_len, 1]
-    
-    # Debug checks (optional)
-    tf.debugging.assert_near(
-        tf.reduce_sum(attention_weights, axis=1),
-        tf.ones_like(attention_weights[:, 0, :]),
-        message="Attention weights don't sum to 1"
-    )
-    
-    # Context vector calculation
-    context_vector = tf.reduce_sum(attention_weights * x, axis=1)  # [batch, features]
-    context_vector = self.layer_norm(context_vector)
-    
-    # Dense processing
-    x = context_vector
-    for layer in self.dense_layers:
-        x = layer(x, training=training)
-    
-    return self.output_layer(x)
+        
+        # Context vector calculation
+        context_vector = tf.reduce_sum(attention_weights * x, axis=1)  # [batch, features]
+        context_vector = self.layer_norm(context_vector)
+        
+        # Dense processing
+        x = context_vector
+        for layer in self.dense_layers:
+            x = layer(x, training=training)
+        
+        return self.output_layer(x), attention_weights
 
     def predict(self, 
                x: np.ndarray,
                return_metrics: bool = False,
-               batch_size: int = 32) -> Dict[str, Any]:
-        """Batch prediction with optional metrics"""
+               batch_size: int = 32,
+               return_attention: bool = False) -> Dict[str, Any]:
+        """Enhanced prediction with attention weights"""
         dataset = tf.data.Dataset.from_tensor_slices(x).batch(batch_size)
-        preds = tf.concat([self(batch) for batch in dataset], axis=0)
+        
+        if return_attention:
+            preds, attentions = [], []
+            for batch in dataset:
+                p, a = self(batch, training=False)
+                preds.append(p)
+                attentions.append(a)
+            preds = tf.concat(preds, axis=0)
+            attentions = tf.concat(attentions, axis=0)
+        else:
+            preds = tf.concat([self(batch, training=False)[0] for batch in dataset], axis=0)
         
         results = {
             'predictions': self._denormalize(preds.numpy())
         }
         
+        if return_attention:
+            results['attention_weights'] = attentions.numpy()
+        
         if return_metrics and hasattr(x, 'true_values'):
             true_denorm = self._denormalize(x.true_values)
             pred_denorm = results['predictions']
             results.update({
-                'haversine_km': haversine_vector(true_denorm, pred_denorm, Unit.KILOMETERS),
+                'haversine_km': self.loss_fn.haversine_loss(
+                    tf.constant(x.true_values),
+                    preds,
+                    reduce_mean=False
+                ).numpy(),
                 'mse': tf.keras.losses.mean_squared_error(x.true_values, preds).numpy()
             })
+        
         return results
 
     def _denormalize(self, array: np.ndarray) -> np.ndarray:
@@ -267,6 +283,12 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
                 'beta_2': self.beta_2,
                 'epsilon': self.epsilon
             },
+            'loss_config': {
+                'use_mse': self.loss_fn.use_mse,
+                'mse_weight': self.loss_fn.mse_weight,
+                'use_attention_loss': isinstance(self.loss_fn, AttentionAwareLoss),
+                'attention_weight': getattr(self.loss_fn, 'attention_weight', 0.0)
+            },
             'norm_factors': self.norm_factors
         }
         np.save(filepath + '_config.npy', config)
@@ -282,7 +304,11 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
             regularization=config['regularization']['type'],
             reg_coefficient=config['regularization']['coefficient'],
             **config['optimizer'],
-            norm_factors=config['norm_factors']
+            norm_factors=config['norm_factors'],
+            use_mse_loss=config['loss_config']['use_mse'],
+            mse_weight=config['loss_config']['mse_weight'],
+            use_attention_loss=config['loss_config']['use_attention_loss'],
+            attention_weight=config['loss_config']['attention_weight']
         )
         
         # Build model graph
@@ -297,17 +323,33 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
     def evaluate(self, 
                 dataset: tf.data.Dataset,
                 return_dict: bool = True) -> Dict[str, float]:
-        """Comprehensive evaluation with multiple metrics"""
-        haversine = tf.keras.metrics.Mean()
-        mse = tf.keras.metrics.Mean()
+        """Comprehensive evaluation using standardized loss"""
+        metrics = {
+            'haversine_loss': tf.keras.metrics.Mean(),
+            'mse': tf.keras.metrics.Mean()
+        }
         
         for x, y_true in dataset:
-            y_pred = self(x, training=False)
-            haversine.update_state(self._haversine_loss(y_true, y_pred))
-            mse.update_state(tf.keras.losses.mean_squared_error(y_true, y_pred))
+            y_pred = self(x, training=False)[0]  # Get only predictions
+            metrics['haversine_loss'].update_state(
+                self.loss_fn.haversine_loss(y_true, y_pred)
+            )
+            metrics['mse'].update_state(
+                tf.keras.losses.mean_squared_error(y_true, y_pred)
+            )
         
-        metrics = {
-            'haversine_km': haversine.result().numpy(),
-            'mse': mse.result().numpy()
-        }
-        return metrics
+        return {k: v.result().numpy() for k, v in metrics.items()}
+
+    def plot_attention(self, sample_input: np.ndarray):
+        """Visualize attention weights for a sample input"""
+        import matplotlib.pyplot as plt
+        
+        results = self.predict(np.expand_dims(sample_input, 0), return_attention=True)
+        weights = results['attention_weights'].squeeze()
+        
+        plt.figure(figsize=(10, 4))
+        plt.plot(weights, 'o-')
+        plt.xlabel('Timestep')
+        plt.ylabel('Attention Weight')
+        plt.title('Temporal Attention Weights')
+        plt.show()
