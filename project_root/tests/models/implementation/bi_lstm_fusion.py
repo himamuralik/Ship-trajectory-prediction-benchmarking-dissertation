@@ -11,6 +11,7 @@ import os
 
 from loading import Normalizer
 from models.model_runner import ModelRunner
+from models.implementation.losses import FusionModelLoss
 
 
 class BiLSTMFusionModelRunner(ModelRunner):
@@ -18,7 +19,7 @@ class BiLSTMFusionModelRunner(ModelRunner):
     Enhanced Bi-LSTM Fusion Model with:
     - Bi-directional LSTM sequence processing
     - Vessel group static feature integration
-    - Haversine distance as primary loss
+    - Standardized trajectory loss calculation
     - MSE for comparative analysis
     """
     
@@ -40,7 +41,10 @@ class BiLSTMFusionModelRunner(ModelRunner):
                  epsilon: float = 1e-7,
                  dropout: float = 0.0,
                  regularization: str = None,
-                 reg_coefficient: float = 0.0):
+                 reg_coefficient: float = 0.0,
+                 use_mse_loss: bool = False,
+                 mse_weight: float = 0.1,
+                 static_weight: float = 0.3):
         """
         Initialize the Bi-LSTM fusion model runner with updated loss handling.
         """
@@ -78,6 +82,14 @@ class BiLSTMFusionModelRunner(ModelRunner):
         
         # Regularization setup
         self.regularizer = self._get_regularizer(regularization, reg_coefficient)
+
+        # Loss configuration
+        self.loss_fn = FusionModelLoss(
+            normalization_factors=self.normalization_factors,
+            use_mse=use_mse_loss,
+            mse_weight=mse_weight,
+            static_weight=static_weight
+        )
         
         # Build model
         self._init_model()
@@ -95,27 +107,6 @@ class BiLSTMFusionModelRunner(ModelRunner):
         elif reg_type == 'l2':
             return L2(coefficient)
         return None
-
-    def _haversine_loss(self, y_true, y_pred):
-        """Custom loss function calculating Haversine distance"""
-        # Denormalize predictions and true values
-        lat_true = y_true[..., 0] * (self.normalization_factors['lat']['max'] - self.normalization_factors['lat']['min']) + self.normalization_factors['lat']['min']
-        lon_true = y_true[..., 1] * (self.normalization_factors['lon']['max'] - self.normalization_factors['lon']['min']) + self.normalization_factors['lon']['min']
-        lat_pred = y_pred[..., 0] * (self.normalization_factors['lat']['max'] - self.normalization_factors['lat']['min']) + self.normalization_factors['lat']['min']
-        lon_pred = y_pred[..., 1] * (self.normalization_factors['lon']['max'] - self.normalization_factors['lon']['min']) + self.normalization_factors['lon']['min']
-        
-        # Convert to radians
-        lat_true, lon_true, lat_pred, lon_pred = map(
-            tf.deg2rad, [lat_true, lon_true, lat_pred, lon_pred]
-        )
-        
-        # Haversine formula
-        dlat = lat_pred - lat_true
-        dlon = lon_pred - lon_true
-        a = tf.sin(dlat/2)**2 + tf.cos(lat_true) * tf.cos(lat_pred) * tf.sin(dlon/2)**2
-        c = 2 * tf.asin(tf.sqrt(a))
-        r = 6371  # Earth radius in km
-        return r * c
 
     def _init_model(self):
         """Build the Bi-LSTM fusion model architecture"""
@@ -144,8 +135,8 @@ class BiLSTMFusionModelRunner(ModelRunner):
         )
         self.model.compile(
             optimizer=self.optimizer,
-            loss=self._haversine_loss,
-            metrics=[self._haversine_loss, 'mse']
+            loss=self.loss_fn,
+            metrics=[self.loss_fn.haversine_loss, 'mse']
         )
 
     def _build_recurrent_pathway(self, input_layer):
@@ -162,6 +153,8 @@ class BiLSTMFusionModelRunner(ModelRunner):
                     name=f'bi_lstm_{i}'
                 )
             )(x)
+            if self.dropout_rate > 0:
+                x = Dropout(self.dropout_rate)(x)
         return x
 
     def _build_static_pathway(self, input_layer):
@@ -172,7 +165,8 @@ class BiLSTMFusionModelRunner(ModelRunner):
             kernel_regularizer=self.regularizer,
             name='static_dense'
         )(input_layer)
-        x = Dropout(self.dropout_rate, name='static_dropout')(x)
+        if self.dropout_rate > 0:
+            x = Dropout(self.dropout_rate, name='static_dropout')(x)
         return x
 
     def _build_fusion_output(self, recurrent_features, static_features):
@@ -189,7 +183,8 @@ class BiLSTMFusionModelRunner(ModelRunner):
                 kernel_regularizer=self.regularizer,
                 name=f'final_dense_{i}'
             )(x)
-            x = Dropout(self.dropout_rate, name=f'final_dropout_{i}')(x)
+            if self.dropout_rate > 0:
+                x = Dropout(self.dropout_rate, name=f'final_dropout_{i}')(x)
         
         return Dense(
             self.output_size,
@@ -197,90 +192,79 @@ class BiLSTMFusionModelRunner(ModelRunner):
             name='output'
         )(x)
 
-   def predict(self, 
-           valid_X_long_term: Tuple[np.ndarray, np.ndarray], 
-           valid_Y_long_term: np.ndarray = None,
-           args: object = None) -> Dict[str, Union[np.ndarray, float]]:
-    """
-    Make predictions with static feature validation
-    
-    Args:
-        valid_X_long_term: Tuple of (recurrent_features, static_features)
-        valid_Y_long_term: Optional ground truth
-        args: Additional arguments
+    def predict(self, 
+               valid_X_long_term: Tuple[np.ndarray, np.ndarray], 
+               valid_Y_long_term: np.ndarray = None,
+               args: object = None) -> Dict[str, Union[np.ndarray, float]]:
+        """
+        Make predictions with static feature validation
         
-    Returns:
-        Dictionary containing predictions and metrics
-    """
-    # --- Input Validation ---
-    recurrent_X, static_X = valid_X_long_term
-    
-    # Validate static features
-    if static_X.shape[1] != self.num_vessel_groups:
-        raise ValueError(
-            f"Static feature dimension mismatch. Expected {self.num_vessel_groups} "
-            f"vessel groups, got {static_X.shape[1]}. Check DataLoader configuration."
-        )
-    
-    # Validate recurrent features
-    if recurrent_X.shape[1] != self.ts_length:
-        raise ValueError(
-            f"Sequence length mismatch. Expected {self.ts_length} timesteps, "
-            f"got {recurrent_X.shape[1]}"
-        )
-    
-    if recurrent_X.shape[2] != self.input_num_recurrent_features:
-        raise ValueError(
-            f"Feature dimension mismatch. Expected {self.input_num_recurrent_features} "
-            f"features, got {recurrent_X.shape[2]}"
-        )
+        Args:
+            valid_X_long_term: Tuple of (recurrent_features, static_features)
+            valid_Y_long_term: Optional ground truth
+            args: Additional arguments
+            
+        Returns:
+            Dictionary containing predictions and metrics
+        """
+        # --- Input Validation ---
+        recurrent_X, static_X = valid_X_long_term
+        
+        # Validate static features
+        if static_X.shape[1] != self.num_vessel_groups:
+            raise ValueError(
+                f"Static feature dimension mismatch. Expected {self.num_vessel_groups} "
+                f"vessel groups, got {static_X.shape[1]}. Check DataLoader configuration."
+            )
+        
+        # Validate recurrent features
+        if recurrent_X.shape[1] != self.ts_length:
+            raise ValueError(
+                f"Sequence length mismatch. Expected {self.ts_length} timesteps, "
+                f"got {recurrent_X.shape[1]}"
+            )
+        
+        if recurrent_X.shape[2] != self.input_num_recurrent_features:
+            raise ValueError(
+                f"Feature dimension mismatch. Expected {self.input_num_recurrent_features} "
+                f"features, got {recurrent_X.shape[2]}"
+            )
 
-    # --- Prediction Logic ---
-    normalized_predictions = self.model.predict(
-        [recurrent_X, static_X],
-        batch_size=args.batch_size if args else 32
-    )
-    
-    # --- Post-processing ---
-    predictions = Normalizer().unnormalize(
-        normalized_predictions, 
-        self.normalization_factors
-    )
-    
-    results = {
-        'predictions': predictions,
-        'normalized_predictions': normalized_predictions
-    }
-    
-    # --- Metrics Calculation (if ground truth provided) ---
-    if valid_Y_long_term is not None:
-        true_values = Normalizer().unnormalize(
-            valid_Y_long_term,
-            self.normalization_factors
+        # --- Prediction Logic ---
+        normalized_predictions = self.model.predict(
+            [recurrent_X, static_X],
+            batch_size=args.batch_size if args else 32
         )
         
-        results.update({
-            'haversine_distances': haversine_vector(true_values, predictions, Unit.KILOMETERS),
-            'mean_haversine': float(np.mean(haversine_vector(true_values, predictions, Unit.KILOMETERS))),
-            'mse': float(tf.keras.losses.mean_squared_error(valid_Y_long_term, normalized_predictions).numpy().mean())
-        })
-    
-    return results
+        # --- Post-processing ---
+        predictions = self.loss_fn._denormalize(normalized_predictions)
+        
+        results = {
+            'predictions': predictions,
+            'normalized_predictions': normalized_predictions
+        }
+        
+        # --- Metrics Calculation (if ground truth provided) ---
+        if valid_Y_long_term is not None:
+            results.update({
+                'haversine_distances': self.loss_fn.haversine_loss(
+                    valid_Y_long_term, normalized_predictions, reduce_mean=False
+                ).numpy(),
+                'mean_haversine': float(np.mean(
+                    self.loss_fn.haversine_loss(
+                        valid_Y_long_term, normalized_predictions, reduce_mean=False
+                    ).numpy()
+                )),
+                'mse': float(tf.keras.losses.mean_squared_error(
+                    valid_Y_long_term, normalized_predictions
+                ).numpy().mean())
+            })
+        
+        return results
 
     def evaluate(self, dataset: tf.data.Dataset) -> Dict[str, float]:
         """Comprehensive evaluation with Haversine and MSE metrics"""
-        haversine = tf.keras.metrics.Mean()
-        mse = tf.keras.metrics.Mean()
-        
-        for batch_X, batch_Y in dataset:
-            y_pred = self.model(batch_X, training=False)
-            haversine.update_state(self._haversine_loss(batch_Y, y_pred))
-            mse.update_state(tf.keras.losses.mean_squared_error(batch_Y, y_pred))
-        
-        return {
-            'haversine_loss_km': haversine.result().numpy(),
-            'mse': mse.result().numpy()
-        }
+        return self.model.evaluate(dataset, return_dict=True)
 
     def save(self, filepath: str, **kwargs):
         """Save model to disk with extended metadata"""
@@ -299,7 +283,12 @@ class BiLSTMFusionModelRunner(ModelRunner):
                 self.regularizer.l1 if hasattr(self.regularizer, 'l1') else 0),
             'beta_1': self.optimizer.beta_1,
             'beta_2': self.optimizer.beta_2,
-            'epsilon': self.optimizer.epsilon
+            'epsilon': self.optimizer.epsilon,
+            'loss_config': {
+                'use_mse': self.loss_fn.use_mse,
+                'mse_weight': self.loss_fn.mse_weight,
+                'static_weight': self.loss_fn.static_weight
+            }
         }
         np.savez(f'{filepath}_runner.npz', **metadata)
 
@@ -311,6 +300,7 @@ class BiLSTMFusionModelRunner(ModelRunner):
         
         # Load runner state
         metadata = np.load(f'{filepath}_runner.npz', allow_pickle=True)
+        
         runner = cls(
             number_of_rnn_layers=len([l for l in model.layers if 'bi_lstm' in l.name]),
             rnn_layer_size=model.get_layer('bi_lstm_0').units,
@@ -329,7 +319,10 @@ class BiLSTMFusionModelRunner(ModelRunner):
             reg_coefficient=metadata.get('reg_coefficient', 0.0),
             beta_1=metadata.get('beta_1', 0.9),
             beta_2=metadata.get('beta_2', 0.999),
-            epsilon=metadata.get('epsilon', 1e-7)
+            epsilon=metadata.get('epsilon', 1e-7),
+            use_mse_loss=metadata.get('loss_config', {}).get('use_mse', False),
+            mse_weight=metadata.get('loss_config', {}).get('mse_weight', 0.1),
+            static_weight=metadata.get('loss_config', {}).get('static_weight', 0.3)
         )
         runner.model = model
         return runner
