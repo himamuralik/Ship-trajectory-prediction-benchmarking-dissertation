@@ -1,3 +1,4 @@
+python
 import os
 import gc
 import json
@@ -87,30 +88,46 @@ class DataLoader():
     Class for performing the final preprocessing steps to get a dataset ready for training and evaluation
     """ 
     def __init__(self, config, args, run_config_path=None, hard_reload=False, conserve_memory=False):
-        self.non_static_models = getattr(config, 'non_static_models', {'bi_lstm', 'bi_lstm_attention'})
+        self.non_static_models = {'bi_lstm', 'bi_lstm_attention'}  # Models that don't use static features
         self.config = config
         self.normalizer = Normalizer()
         self.conserve_memory = conserve_memory
         self.run_config = RunConfig()
 
+        # Get model type from args and validate
+        model_type = getattr(args, 'model_type', 'bi_lstm').lower()
+        if model_type not in {'bi_lstm', 'bi_lstm_attention', 'long_term_fusion'}:
+            raise ValueError(f"Invalid model_type: {model_type}. Must be one of: bi_lstm, bi_lstm_attention, long_term_fusion")
+
+        # Map model types to internal categories
+        if model_type in {'bi_lstm', 'bi_lstm_attention'}:
+            self.run_config['model_type'] = 'long_term'  # Generic sequential model
+            self.run_config['use_attention'] = (model_type == 'bi_lstm_attention')
+        else:
+            self.run_config['model_type'] = model_type  # long_term_fusion
+
         keys_to_save = [
-            'time', 'length_of_history', 'model_type',
-            'hours_out', 'time_of_day', 'sog_cog',
-            'distance_traveled', 'debug',
-            'extended_recurrent_idxs', 'fusion_layer_structure', 'static_columns'
+            'time', 'length_of_history', 'hours_out', 
+            'time_of_day', 'sog_cog', 'distance_traveled', 
+            'debug', 'extended_recurrent_idxs', 
+            'fusion_layer_structure', 'static_columns'
         ]
         for k in keys_to_save:
             if hasattr(args, k):
                 self.run_config[k] = getattr(args, k)
             else:
                 self.run_config[k] = None
-        self._init_static_features(config, getattr(args, 'model_type', None))
+
+        self._init_static_features(config, model_type)
         # Hardcode hours_out to 3 here, overriding anything from args
         self.run_config['hours_out'] = 3
-        self.run_config['formatted_dir'] = os.path.join(self.config.data_directory, f'{self.config.dataset_config.lat_1}_{self.config.dataset_config.lat_2}_'
-                                     f'{self.config.dataset_config.lon_1}_{self.config.dataset_config.lon_2}_'
-                                     f'{self.config.start_year}_{self.config.end_year}',
-                                     self.config.dataset_name)
+        self.run_config['formatted_dir'] = os.path.join(
+            self.config.data_directory, 
+            f'{self.config.dataset_config.lat_1}_{self.config.dataset_config.lat_2}_'
+            f'{self.config.dataset_config.lon_1}_{self.config.dataset_config.lon_2}_'
+            f'{self.config.start_year}_{self.config.end_year}',
+            self.config.dataset_name
+        )
         self.run_config['dataset_name'] = config.dataset_name
         self.run_config['normalization_factors'] = None
 
@@ -130,10 +147,8 @@ class DataLoader():
             if not isinstance(static_columns, (list, set)):
                 raise ProcessingError("config.static_columns must be a list or set")
                 
-            model_type = model_type.lower() if model_type else ''
-            
-            # Only fusion models use static features by default
-            if model_type == 'fusion':
+            # Only fusion models use static features
+            if model_type == 'long_term_fusion':
                 self.run_config['static_columns'] = static_columns
                 if static_columns:
                     logging.info(f"Using static features for fusion model: {static_columns}")
@@ -604,7 +619,9 @@ class DataLoader():
         self.dataset = loading.read_ts_data(data_dir, self.run_config['time'], x_or_y, dtype='float32', conserve_memory=self.conserve_memory)
         transformations = self.run_config['transformations']
 
-        if (self.run_config['static_columns'] and 
+        # Handle static features only for fusion model
+        if (self.run_config['model_type'] == 'long_term_fusion' and 
+            self.run_config['static_columns'] and 
             isinstance(self.dataset, DiskArray)):
             static_path = os.path.join(data_dir, 'static_features.csv')
             if os.path.exists(static_path):
@@ -702,7 +719,7 @@ class DataLoader():
         extra_info = {'lat_lon_idxs':
                           [loading._find_current_col_idx('lat', analysis_columns),
                            loading._find_current_col_idx('lon', analysis_columns)]}
-        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+                analysis_columns, analysis_transformations = self._identify_cols_to_add(
             analysis_columns, analysis_transformations,
             ['distance_traveled'], 'float32', extra_info
         )
