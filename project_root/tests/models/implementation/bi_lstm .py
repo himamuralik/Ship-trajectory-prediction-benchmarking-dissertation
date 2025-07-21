@@ -1,5 +1,5 @@
 import tensorflow as tf
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 import numpy as np
 from haversine import haversine_vector, Unit
 from models.implementation.losses import TrajectoryLoss
@@ -103,7 +103,46 @@ class BiLSTMTrajectoryPredictor(TrajectoryModelRunner):
             metrics=[self.loss_fn.haversine_loss, 'mse']
         )
 
-    # ... (keep existing _build_layers and call methods unchanged) ...
+    def _build_layers(self):
+        """Build the BiLSTM model architecture"""
+        inputs = tf.keras.layers.Input(shape=(self.input_ts_length, self.input_num_features))
+        
+        # BiLSTM layers
+        x = inputs
+        for i in range(self.lstm_num_layers):
+            return_sequences = (i < self.lstm_num_layers - 1)  # Only return sequences for intermediate layers
+            x = tf.keras.layers.Bidirectional(
+                tf.keras.layers.LSTM(
+                    self.lstm_hidden_dim,
+                    return_sequences=return_sequences,
+                    kernel_regularizer=self.regularizer,
+                    recurrent_regularizer=self.regularizer
+                )
+            )(x)
+            if self.dropout_rate > 0:
+                x = tf.keras.layers.Dropout(self.dropout_rate)(x)
+        
+        # Dense layers
+        for _ in range(self.num_dense_layers):
+            x = tf.keras.layers.Dense(
+                self.dense_layer_size,
+                activation='relu',
+                kernel_regularizer=self.regularizer
+            )(x)
+        
+        # Output layer
+        outputs = tf.keras.layers.Dense(self.output_num_features)(x)
+        
+        self._model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    def call(self, inputs, training=None):
+        """Forward pass"""
+        return self._model(inputs, training=training)
+
+    @property
+    def model(self):
+        """Get the underlying Keras model"""
+        return self._model
 
     def predict(self, 
                x: np.ndarray,
@@ -128,14 +167,17 @@ class BiLSTMTrajectoryPredictor(TrajectoryModelRunner):
             normalized_preds.append(self.model(batch, training=False))
         normalized_preds = tf.concat(normalized_preds, axis=0).numpy()
         
-        predictions = self._denormalize(normalized_preds)
+        # Use the loss function's denormalization method
+        predictions = self.loss_fn._denormalize(normalized_preds)
         
         results = {'predictions': predictions}
         
         if return_metrics and hasattr(x, 'true_values'):
-            true_values = self._denormalize(x.true_values)
+            true_values = self.loss_fn._denormalize(x.true_values)
             results.update({
-                'haversine_distances': haversine_vector(true_values, predictions, Unit.KILOMETERS),
+                'haversine_distances': self.loss_fn.haversine_loss(
+                    x.true_values, normalized_preds, reduce_mean=False
+                ).numpy(),
                 'mse': tf.keras.losses.mean_squared_error(
                     x.true_values, normalized_preds
                 ).numpy().mean()
