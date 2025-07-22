@@ -1,5 +1,6 @@
 # models/tuning/base_tuner.py
 import os
+import json
 import keras_tuner as kt
 import yaml
 from typing import Callable, Dict, Any
@@ -37,6 +38,30 @@ class BaseTuner:
         split_idx = int(len(data[0]) * (1 - config.val_ratio))
         return (data[0][:split_idx], data[1][:split_idx]), (data[0][split_idx:], data[1][split_idx:])
 
+    def save_trials_to_json(self, tuner, filename=None):
+        """Save all trials' hyperparameters and metrics to JSON."""
+        if filename is None:
+            filename = f"{self.model_name}_{self.dataset_name}_trials.json"
+        
+        trials = tuner.oracle.get_bests(num_trials=100)  # Get top 100 trials
+        results = []
+        
+        for trial in trials:
+            results.append({
+                "hyperparameters": trial.hyperparameters.values,
+                "score": trial.score,
+                "metrics": {
+                    "val_loss": trial.metrics.get_last_value("val_loss"),
+                    # Add other metrics if needed (e.g., "accuracy")
+                }
+            })
+        
+        with open(filename, "w") as f:
+            json.dump(results, f, indent=4)
+        
+        print(f"Saved tuning results to {filename}")
+        return filename
+
     def run_tuning(self, build_model_fn: Callable, loader, **tuner_kwargs):
         train_data, val_data = self._prepare_data(loader)
         
@@ -56,4 +81,8 @@ class BaseTuner:
             **config.tuning_params
         )
         
-        return tuner.get_best_hyperparameters()[0].values
+        # Save all trials + best params
+        self.save_trials_to_json(tuner)
+        best_hps = tuner.get_best_hyperparameters()[0]
+        
+        return best_hps.values
