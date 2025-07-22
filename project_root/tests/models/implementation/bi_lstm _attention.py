@@ -169,7 +169,18 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
         )
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, tf.Tensor]:
-        """Forward pass that returns both predictions and attention weights"""
+      """
+    Forward pass returning both predictions and attention weights.
+    
+    Args:
+        inputs: Input tensor of shape [batch, timesteps, features]
+        training: Whether in training mode
+        
+    Returns:
+        tuple: (predictions, attention_weights) 
+               - predictions: Shape [batch, output_features]
+               - attention_weights: Shape [batch, timesteps, 1]
+    """
         # Input validation
         if len(inputs.shape) != 3:
             raise ValueError(
@@ -203,6 +214,15 @@ class BiLSTMAttentionTrajectoryPredictor(tf.keras.Model):
             x = layer(x, training=training)
         
         return self.output_layer(x), attention_weights
+
+    def predict_only(self, inputs: tf.Tensor) -> tf.Tensor:
+        """Convenience method for when only predictions are needed.
+        Args:
+            inputs: Input tensor of shape [batch, timesteps, features]
+        Returns:
+            predictions: Shape [batch, output_features] 
+        """
+        return self(inputs, training=False)[0]  # Returns only predictions
 
     def predict(self, 
                x: np.ndarray,
