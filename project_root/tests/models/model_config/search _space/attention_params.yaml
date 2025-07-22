@@ -3,16 +3,28 @@ lstm_num_layers:
   min: 1
   max: 4
 lstm_hidden_dim:
-  values: [64, 128, 256, 512]
+  values: [64, 128, 256]
 num_dense_layers:
   min: 0
   max: 3
 dense_layer_size:
   values: [32, 64, 128, 256]
 
+# Attention parameters
+attention_loss:
+  choices: [True, False]
+attention_weight:
+  min: 0.1
+  max: 0.9
+mse_loss:
+  choices: [True, False]
+mse_weight:
+  min: 0.1
+  max: 0.5
+
 # Optimization parameters
 learning_rate:
-  values: [1e-4, 7.5e-3, 1e-2, 5e-2]
+  values: [1e-4, 3e-4, 1e-3, 3e-3]
 beta_1:
   values: [0.85, 0.9, 0.95]
 beta_2:
