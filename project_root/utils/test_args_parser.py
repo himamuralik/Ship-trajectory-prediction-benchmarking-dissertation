@@ -1,6 +1,6 @@
 import argparse
 import os
-
+import json
 import numpy as np
 
 from config import config
@@ -32,6 +32,10 @@ class TestArgParser():
                                choices=['long_term', 'long_term_fusion'],
                                help='Model architecture type')
         
+        # Attention mechanism flag
+        self.parser.add_argument('--use_attention', action='store_true',
+                               help='Use attention mechanism (for long_term models)')
+
         # Hyperparameter tuning mode
         self.parser.add_argument('--tuning_mode', 
                                type=str, 
@@ -104,29 +108,98 @@ class TestArgParser():
 
         if self.args.tuning_mode != 'none':
             self._run_tuning()  # Overwrite args with tuned values
+            self._verify_tuning_results()
         else:
             self._sample_args()
         
         self._validate_args()
         return self.args
 
+    def _verify_tuning_results(self):
+        """Verify tuning results by loading the generated JSON file"""
+        json_path = os.path.join(
+            config.model_dir,
+            'tuning_results',
+            f"{self._get_model_name()}_{self.args.dataset_name}_trials.json"
+        )
+        
+        if os.path.exists(json_path):
+            with open(json_path) as f:
+                trials = json.load(f)
+                if trials:
+                    best_trial = min(trials, key=lambda x: x['score'])
+                    print(f"\nBest hyperparameters from tuning:")
+                    for k, v in best_trial['hyperparameters'].items():
+                        print(f"{k:>25}: {v}")
+
+    def _get_model_name(self):
+        """Map model_type to tuner name, handling attention via use_attention flag"""
+        if self.args.model_type == 'long_term' and getattr(self.args, 'use_attention', False):
+            return 'bi_lstm_attention'
+        return {
+            'long_term': 'bi_lstm',
+            'long_term_fusion': 'bi_lstm_fusion'
+        }.get(self.args.model_type, 'bi_lstm')
+
     def _run_tuning(self):
         """
         Execute hyperparameter tuning and update args with best parameters
         """
-        if self.args.tuning_mode == 'none':
-            return
-            
         try:
-            from tuning.bi_lstm_tuner import BiLSTMTuner
-            tuner = BiLSTMTuner(self.args.dataset_name)
+            # Updated tuner selection logic
+            model_name = self._get_model_name()
+            
+            if model_name == 'bi_lstm':
+                from tuning.bi_lstm_tuner import BiLSTMTuner
+                tuner = BiLSTMTuner(self.args.dataset_name)
+            elif model_name == 'bi_lstm_attention':
+                from tuning.attention_tuner import AttentionTuner
+                tuner = AttentionTuner(self.args.dataset_name)
+            elif model_name == 'bi_lstm_fusion':
+                from tuning.fusion_tuner import FusionTuner
+                tuner = FusionTuner(self.args.dataset_name)
+            else:
+                raise ValueError(f"Unsupported model type for tuning: {self.args.model_type}")
+
             best_hps = tuner.tune(loader=self._get_data_loader())
             
-            # Update args with best hyperparameters
-            for hp_name, hp_value in best_hps.values.items():
-                setattr(self.args, hp_name, hp_value)
-        except ImportError:
-            raise ImportError("Tuning module not found. Ensure tuning/ directory exists with proper tuner implementations.")
+            # Structured parameter mapping
+            param_mapping = {
+                'bi_lstm': {
+                    'number_of_rnn_layers': 'lstm_num_layers',
+                    'rnn_layer_size': 'lstm_hidden_dim',
+                    'number_of_dense_layers': 'num_dense_layers',
+                    'dense_layer_size': 'dense_layer_size',
+                    'learning_rate': 'learning_rate',
+                    'dropout': 'dropout',
+                    'use_attention': False
+                },
+                'bi_lstm_attention': {
+                    'number_of_rnn_layers': 'lstm_num_layers',
+                    'rnn_layer_size': 'lstm_hidden_dim',
+                    'number_of_dense_layers': 'num_dense_layers',
+                    'dense_layer_size': 'dense_layer_size',
+                    'learning_rate': 'learning_rate',
+                    'dropout': 'dropout',
+                    'use_attention': True
+                },
+                'bi_lstm_fusion': {
+                    'number_of_rnn_layers': 'lstm_num_layers',
+                    'rnn_layer_size': 'lstm_hidden_dim',
+                    'number_of_dense_layers': 'num_dense_layers',
+                    'dense_layer_size': 'dense_layer_size',
+                    'learning_rate': 'learning_rate',
+                    'dropout': 'dropout'
+                }
+            }
+            
+            # Update args with mapped hyperparameters
+            for arg_name, hp_name in param_mapping[model_name].items():
+                if hp_name in best_hps.values:
+                    setattr(self.args, arg_name, best_hps.values[hp_name])
+                    
+        except ImportError as e:
+            raise ImportError(f"Tuning module not found: {str(e)}")
         except Exception as e:
             raise RuntimeError(f"Hyperparameter tuning failed: {str(e)}")
 
@@ -210,7 +283,11 @@ class TestArgParser():
             Req(a=Values('regularization', ['dropout']),
                 b=Values('regularization_application', ['recurrent', None])),
             Req(a=Values('regularization', ['l1', 'l2']),
-                b=Values('regularization_application', ['recurrent', 'bias', 'activity']))
+                b=Values('regularization_application', ['recurrent', 'bias', 'activity'])),
+                
+            # New attention validation rule
+            Req(a=Given('use_attention'),
+                b=Values('model_type', ['long_term']))
         ]
 
         for req in requirements:
