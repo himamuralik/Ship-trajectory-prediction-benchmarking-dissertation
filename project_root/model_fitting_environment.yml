@@ -1,0 +1,51 @@
+name: ships_fitting
+channels:
+  - conda-forge
+  - nvidia
+  - defaults
+dependencies:
+  # Core Python
+  - python=3.10.2
+  
+  # GPU stack
+  - cudatoolkit=11.6.0
+  - cudnn=8.2.1.32
+  - nccl=2.11.4.1
+  
+  # ML Framework
+  - tensorflow-gpu=2.7.0
+  - keras=2.7.0
+  - keras-tuner=1.1.0
+  - tensorflow-addons=0.16.1
+  
+  # Data Processing
+  - pandas=1.4.1
+  - numpy=1.22.2
+  - scipy=1.8.0
+  - numexpr=2.7.3
+  - zarr=2.11.3  # For array storage
+  
+  # Geospatial
+  - haversine=2.5.1
+  
+  # ML Tools
+  - mlflow=1.23.1
+  - scikit-learn=1.0.2
+  - pyyaml=6.0
+  
+  # Visualization & Debugging
+  - matplotlib=3.5.1
+  - seaborn=0.11.2
+  - memory_profiler=0.60.0
+  
+  # Development
+  - jupyter=1.0.0
+  - ipython=8.4.0
+  - pip=22.0.3
+  
+  # Pip-only packages
+  - pip:
+    - nvidia-ml-py3==7.352.0  # For GPU monitoring
+    - pycuda==2021.1  # Optional for advanced CUDA control
+    - sqlalchemy==1.4.31  # For MLflow backend
+    - alembic==1.7.6  # For database migrations
