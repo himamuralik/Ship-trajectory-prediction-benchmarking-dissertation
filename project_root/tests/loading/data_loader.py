@@ -1,11 +1,11 @@
-python
 import os
 import gc
 import json
-import logging 
+
 import pandas as pd
 import numpy as np
 from mlflow import log_artifact
+
 from utils.utils import clear_path
 from loading import loading
 from loading.normalizer import Normalizer
@@ -13,7 +13,7 @@ from loading.disk_array import DiskArray
 
 class ProcessingError(Exception):
     """
-    Error that occurred due to preprocessing
+    Error that occurwed due to preprocessing
     """
     pass
 
@@ -23,9 +23,7 @@ class RunConfig():
     dataset for model fitting.
     """
     def __init__(self):
-        self.data = {
-            # Initialize with empty dict (original behavior preserved)
-        }
+        self.data = {}
 
     def __getitem__(self, item):
         return self.data[item]
@@ -50,67 +48,53 @@ class RunConfig():
 
         columns_path = os.path.join(path, 'columns.csv')
         self.data['columns'] = pd.read_csv(columns_path)
-        # Add this line to filter out weather/destination columns if they exist
-        self.data['columns'] = self.data['columns'][
-            ~self.data['columns']['column_group'].isin(['weather', 'destination_cluster'])
-        ]
 
     def save_to_dir(self, path, register_with_mlflow=False):
         """
-        Save a run config to disk :param path: Path to save to
+        Save a run config to disk
+
+        :param path: Path to save to
         :param register_with_mlflow: Whether to register the saved artifact with mlflow
-        :return: 
+        :return:
         """
         clear_path(path)
         os.mkdir(path)
-        # Temporary removal of special fields
-        hours_out = self.data.pop('hours_out', None)
-        # Handle static columns if they exist
-        if 'static_columns' in self.data:
-            static_cols = self.data.pop('static_columns')
+
+        # We don't want to store this is in the run config file, as we'll be storing multiple hours out together in the
+        # same directory, so it has to be loaded in from the args
+        hours_out = self.data.pop('hours_out')
+
         columns = self.data.pop('columns')
         columns_path = os.path.join(path, 'columns.csv')
         columns.to_csv(columns_path, index=False)
+
         other_path = os.path.join(path, 'other.json')
         with open(other_path, 'w') as outfile:
             json.dump(self.data, outfile)
         if register_with_mlflow:
             log_artifact(path)
-        # Restore all fields
+
         self.data['columns'] = columns
         self.data['hours_out'] = hours_out
-        # Restore static columns if they were removed
-        if 'static_columns' in locals():
-            self.data['static_columns'] = static_cols
-        
+
+
 class DataLoader():
     """
     Class for performing the final preprocessing steps to get a dataset ready for training and evaluation
-    """ 
+    """
     def __init__(self, config, args, run_config_path=None, hard_reload=False, conserve_memory=False):
-        self.non_static_models = {'bi_lstm', 'bi_lstm_attention'}  # Models that don't use static features
         self.config = config
         self.normalizer = Normalizer()
         self.conserve_memory = conserve_memory
+
         self.run_config = RunConfig()
 
-        # Get model type from args and validate
-        model_type = getattr(args, 'model_type', 'bi_lstm').lower()
-        if model_type not in {'bi_lstm', 'bi_lstm_attention', 'long_term_fusion'}:
-            raise ValueError(f"Invalid model_type: {model_type}. Must be one of: bi_lstm, bi_lstm_attention, long_term_fusion")
-
-        # Map model types to internal categories
-        if model_type in {'bi_lstm', 'bi_lstm_attention'}:
-            self.run_config['model_type'] = 'long_term'  # Generic sequential model
-            self.run_config['use_attention'] = (model_type == 'bi_lstm_attention')
-        else:
-            self.run_config['model_type'] = model_type  # long_term_fusion
-
         keys_to_save = [
-            'time', 'length_of_history', 'hours_out', 
-            'time_of_day', 'sog_cog', 'distance_traveled', 
-            'debug', 'extended_recurrent_idxs', 
-            'fusion_layer_structure', 'static_columns'
+            'time', 'length_of_history', 'model_type',
+            'hours_out', 'time_of_day', 'sog_cog',
+            'distance_traveled', 'weather', 'debug',
+            'extended_recurrent_idxs', 'fusion_layer_structure',
+            'destination'
         ]
         for k in keys_to_save:
             if hasattr(args, k):
@@ -118,17 +102,13 @@ class DataLoader():
             else:
                 self.run_config[k] = None
 
-        self._init_static_features(config, model_type)
-        # Hardcode hours_out to 3 here, overriding anything from args
-        self.run_config['hours_out'] = 3
-        self.run_config['formatted_dir'] = os.path.join(
-            self.config.data_directory, 
-            f'{self.config.dataset_config.lat_1}_{self.config.dataset_config.lat_2}_'
-            f'{self.config.dataset_config.lon_1}_{self.config.dataset_config.lon_2}_'
-            f'{self.config.start_year}_{self.config.end_year}',
-            self.config.dataset_name
-        )
+
+        self.run_config['formatted_dir'] = os.path.join(self.config.data_directory, f'{self.config.dataset_config.lat_1}_{self.config.dataset_config.lat_2}_'
+                                     f'{self.config.dataset_config.lon_1}_{self.config.dataset_config.lon_2}_'
+                                     f'{self.config.start_year}_{self.config.end_year}',
+                                     self.config.dataset_name)
         self.run_config['dataset_name'] = config.dataset_name
+
         self.run_config['normalization_factors'] = None
 
         if hard_reload:
@@ -139,26 +119,6 @@ class DataLoader():
             self._create_run_config()
         else:
             self._load_run_config_from_cache()
-
-    def _init_static_features(self, config, model_type):
-        """Initialize static features based on model type"""
-        try:
-            static_columns = getattr(config, 'static_columns', [])
-            if not isinstance(static_columns, (list, set)):
-                raise ProcessingError("config.static_columns must be a list or set")
-                
-            # Only fusion models use static features
-            if model_type == 'long_term_fusion':
-                self.run_config['static_columns'] = static_columns
-                if static_columns:
-                    logging.info(f"Using static features for fusion model: {static_columns}")
-            else:
-                self.run_config['static_columns'] = []
-                logging.debug(f"Ignoring static features for {model_type} model")
-                
-        except Exception as e:
-            logging.error(f"Error initializing static features: {str(e)}")
-            self.run_config['static_columns'] = []
 
     def _load_run_config_from_cache(self, run_config_path=None):
         """
@@ -173,19 +133,22 @@ class DataLoader():
         if run_config_path is None:
             run_config_path = os.path.join(self._get_cache_dir('x'), 'run_config')
         self.run_config.load_from_dir(run_config_path)
-        if 'static_columns' not in self.run_config.data:
-            self.run_config['static_columns'] = self.config.static_columns if hasattr(self.config, 'static_columns') else []
+
         self._amend_hours_out_transformation()
 
     def _amend_y_timestamp_selection(self, transformations, timestamps_to_take):
         """
-        Adjusts the stored timestamp selection indices for the fixed 3-hour prediction horizon.
-        Note: The prediction horizon is fixed at 3 hours (hardcoded in __init__). This method only updates the internal timestamp indices to maintain consistency with the interpolation settings.
-        Args:
-        transformations: List of preprocessing transformations
-        timestamps_to_take: Pre-calculated indices matching 3-hour prediction at current interpolation frequency
-        Returns:
-        Updated transformations list  
+        Select a different y timestamp than the one stored in the cached run config
+
+        A single run config may be used with multiple different hours out values (i.e. one
+        run config may correspond to datasets for predicting 1 hours out/2 hours out/3 hours out).
+
+        The run config stores information about selecting the y timestamp (which is based on the hours out value),
+        so this simply updates the run config so that it matches with the correct hours out
+
+        :param transformations: The list of transformations that are being made
+        :param timestamps_to_take: Index of the y timestamps
+        :return:
         """
         timestamps_to_take = timestamps_to_take if type(timestamps_to_take) == list else [timestamps_to_take]
 
@@ -197,23 +160,29 @@ class DataLoader():
                                                'to_select': timestamps_to_take}
         return transformations
 
+
     def _amend_hours_out_transformation(self):
         """
-        Adjusts the target timestamp selection for the fixed 3-hour prediction horizon.
-        For long_term models, calculates which timestamp indices correspond to the configured
-        3-hour prediction window based on:
-        - config.length_into_the_future (fixed 3-hour horizon)
-        - config.interpolation_time_gap (default 5 minutes)
-        - run_config['time'] (current time resolution)
-        Updates the transformations to select the correct y-indices for prediction.
+        Wrapper for _amend_y_timestamp_selection
+
+        A single run config may be used with multiple different hours out values (i.e. one
+        run config may correspond to datasets for predicting 1 hours out/2 hours out/3 hours out).
+
+        The run config stores information about selecting the y timestamp (which is based on the hours out value),
+        so this simply updates the run config so that it matches with the correct hours out
+
+        :return:
         """
-        if self.run_config['model_type'] not in ['long_term', 'long_term_fusion']:
-            return
-        percent_of_timestamps_to_take = self.config.interpolation_time_gap / (self.run_config['time'] * 60)
-        number_of_timestamps = int((self.config.length_into_the_future + 1) * percent_of_timestamps_to_take)
-        total_number_of_hours = int(self.config.interpolation_time_gap * (self.config.length_into_the_future + 1)
+        if self.run_config['model_type'] in ['long_term', 'long_term_fusion']:
+            percent_of_timestamps_to_take = self.config.interpolation_time_gap / (self.run_config['time'] * 60)
+            number_of_timestamps = int((self.config.length_into_the_future + 1) * percent_of_timestamps_to_take)
+            total_number_of_hours = int(self.config.interpolation_time_gap * (self.config.length_into_the_future + 1)
                                         / (60 ** 2))
-        y_timestamp_to_take = int(self.run_config['hours_out'] / total_number_of_hours * number_of_timestamps) - 1
+            y_timestamp_to_take = int(self.run_config['hours_out'] / total_number_of_hours * number_of_timestamps) - 1
+        elif self.run_config['model_type'] == 'iterative':
+            y_timestamp_to_take = 0
+        else:
+            return
 
         self.run_config['transformations'] = self._amend_y_timestamp_selection(self.run_config['transformations'],
                                                                                y_timestamp_to_take)
@@ -221,7 +190,9 @@ class DataLoader():
     def _cached_config_exists(self):
         """
         Check whether a cached run config exists
+
         If a cached run config exists, one will not need to be recreated
+
         :return:
         """
         cache_dir = self._get_cache_dir('x')
@@ -231,15 +202,17 @@ class DataLoader():
     def _create_run_config(self):
         """
         Create a run config from scratch
+
         :return:
         """
         self._create_columns_df()
         self._find_shapes()
         self._identify_transformations()
+
         self._calculate_normalization_factors()
         self._save_run_config_to_cache()
 
-    def load_set(self, time_period, sliding_window_method, x_or_y, hard_reload=False, for_analysis=False):
+    def load_set(self, time_period, sliding_window_method, x_or_y, hard_reload = False, for_analysis=False):
         """
         Load a dataset, based on the run config
 
@@ -270,6 +243,7 @@ class DataLoader():
             else:
                 return self._load_ds_from_cache(time_period, sliding_window_method, x_or_y)
 
+
     def _get_cache_dir(self, x_or_y):
         """
         Find the directory to save/load the cached dataset to/from
@@ -281,10 +255,12 @@ class DataLoader():
             os.path.dirname(self.run_config['formatted_dir']),
             f'.{self.run_config["dataset_name"]}_{self.run_config["model_type"]}_{self.run_config["debug"]}_'
             f'{self.run_config["sog_cog"]}_{self.run_config["time_of_day"]}_{self.run_config["time"]}_'
-            f'{self.run_config["distance_traveled"]}_'
+            f'{self.run_config["distance_traveled"]}_{self.run_config["weather"]}_'
             f'{self.run_config["extended_recurrent_idxs"]}_{self.run_config["fusion_layer_structure"]}_'
             f'{self.run_config["length_of_history"]}'
         )
+        if self.run_config["destination"] != 'ignore':
+            base_cache_dir += '_' + self.run_config["destination"]
         if x_or_y == 'x':
             return base_cache_dir
         elif self.run_config["hours_out"] is None:
@@ -323,20 +299,21 @@ class DataLoader():
 
         dir = self._get_cache_dir(x_or_y)
 
-        if isinstance(self.dataset, list):
+        if type(self.dataset) == list:
             dir = os.path.join(dir, f'{time_period}_{sliding_window_method}_{x_or_y}')
             clear_path(dir)
             os.mkdir(dir)
             for i in range(len(self.dataset)):
                 path = os.path.join(dir, f'{i}.npy')
                 np.save(path, self.dataset[i])
-        elif isinstance(self.dataset, DiskArray):
+        elif type(self.dataset) == DiskArray:
             dir = os.path.join(dir, f'{time_period}_{sliding_window_method}_{x_or_y}')
             self.dataset.save_to_disk(dir)
         else:
             path = os.path.join(dir, f'{time_period}_{sliding_window_method}_{x_or_y}.npy')
             clear_path(path)
             np.save(path, self.dataset)
+
 
     def _load_ds_from_cache(self, time_period, sliding_window_method, x_or_y):
         """
@@ -386,6 +363,7 @@ class DataLoader():
         path3 = os.path.join(dir, f'{time_period}_{sliding_window_method}_{x_or_y}.npy')
         return os.path.exists(path1) or os.path.exists(path2) or os.path.exists(path3)
 
+
     def _identify_transformations(self):
         """
         Create the list of steps that will need to be performed to prepare the dataset for training/evaluation
@@ -427,6 +405,12 @@ class DataLoader():
             self.run_config['transformations'] += [{'dataset': ['y'],
                                                     'function':'select_timestamps',
                                                     'to_select': [y_timestamp_to_take]}]
+        elif self.run_config['model_type'] == 'iterative':
+            y_timestamp_to_take = 0
+            self.run_config['transformations'] += [{'dataset': ['y'],
+                                                    'function':'select_timestamps',
+                                                    'to_select': [y_timestamp_to_take]}]
+
 
         # Check if we need to add hour/day columns
         if self.run_config['time_of_day'] == 'hour_day':
@@ -469,6 +453,28 @@ class DataLoader():
                 ['distance_traveled'], 'float32', extra_info
             )
 
+        # Check if we need to remove weather data
+        if self.run_config['weather'] == 'ignore':
+            weather_columns = self.run_config['columns']['column'][self.run_config['columns']['column_group'] == 'weather']
+            self.run_config['columns'], self.run_config['transformations'] = self._identify_cols_to_delete(
+                self.run_config['columns'], self.run_config['transformations'], weather_columns.tolist())
+
+        if self.run_config['destination'] == 'ignore':
+            destination_columns = self.run_config['columns']['column'][self.run_config['columns']['column_group'] == 'destination_cluster']
+            self.run_config['columns'], self.run_config['transformations'] = self._identify_cols_to_delete(
+                self.run_config['columns'], self.run_config['transformations'], destination_columns.tolist())
+        elif self.run_config['destination'] == 'ohe':
+            destination_center_columns = ['destination_cluster_lat_center','destination_cluster_lon_center']
+            self.run_config['columns'], self.run_config['transformations'] = self._identify_cols_to_delete(
+                self.run_config['columns'], self.run_config['transformations'], destination_center_columns)
+        elif self.run_config['destination'] == 'cluster_centers':
+            ohe_destination_columns = self.run_config['columns']['column'][
+                (self.run_config['columns']['column_group'] == 'destination_cluster')
+                & (self.run_config['columns']['dtype'] == 'bool')
+            ]
+            self.run_config['columns'], self.run_config['transformations'] = self._identify_cols_to_delete(
+                self.run_config['columns'], self.run_config['transformations'], ohe_destination_columns.tolist())
+
         # Add that we'll need to normalize
         self.run_config['transformations'] += [{'dataset':['x', 'y'], 'function': 'normalize'}]
 
@@ -477,8 +483,8 @@ class DataLoader():
         if self.run_config['model_type'] == 'long_term_fusion':
             if self.run_config['extended_recurrent_idxs'] == 'all_non_weather':
                 recurrent_cols = self.run_config['columns']['column'][
-                (~self.run_config['columns']['column'].isin(self.run_config.get('static_columns', []))) 
-                & self.run_config['columns']['being_used']
+                    (self.run_config['columns']['column_group'] != 'weather')
+                    & self.run_config['columns']['being_used']
                 ].tolist()
             else:
                 if self.run_config['sog_cog'] == 'raw':
@@ -488,7 +494,7 @@ class DataLoader():
                 if self.run_config['extended_recurrent_idxs'] == 'vt_dst_and_time':
                     vt_dst_columns = self.run_config['columns']['column'][
                         ((self.run_config['columns']['column_group'] == 'vessel_group')
-                         & (~self.run_config['columns']['column'].isin(self.run_config.get('static_columns', [])))
+                        | (self.run_config['columns']['column_group'] == 'destination_cluster'))
                          & self.run_config['columns']['being_used']
                     ].tolist()
                     recurrent_cols += vt_dst_columns
@@ -501,18 +507,30 @@ class DataLoader():
                                                         'columns':recurrent_cols,
                                                         'indexes':self.run_config['recurrent_idxs']}]
 
+
+                # Check if we need to change the shape of the weather data for a CNN
+                if self.run_config['fusion_layer_structure'] == 'convolutions':
+                    weather_columns = self.run_config['columns']['column'][
+                        (self.run_config['columns']['column_group'] == 'weather')
+                        ]
+                    weather_idxs = [loading._find_current_col_idx(c, self.run_config['columns']) for c in weather_columns]
+                    self.run_config['transformations'] += [{'dataset': ['x'], 'function': 'reshape_weather',
+                                                            'columns': weather_columns.to_list(), 'indexes':weather_idxs}]
+
+
         # Slice to just the y cols
-        y_cols = ['lat','lon']
-        if self.run_config['sog_cog'] == 'raw' and self.run_config['model_type'] == 'long_term':
-            y_cols += ['sog','cog']
-        
+        if self.run_config['sog_cog'] == 'raw' and self.run_config['model_type'] == 'iterative':
+            y_cols = ['lat','lon','sog','cog']
+        else:
+            y_cols = ['lat','lon']
         self.run_config['y_idxs'] = [loading._find_current_col_idx(c, self.run_config['columns']) for c in y_cols]
 
-        if self.run_config['model_type'] in ('long_term','long_term_fusion'):
+        if self.run_config['model_type'] in ('attention_seq2seq','iterative','long_term','long_term_fusion'):
             self.run_config['transformations'] += [{'dataset':['y'], 'function':'select_columns',
                                                     'indexes':self.run_config['y_idxs']}]
 
             self.run_config['transformations'] += [{'dataset':['y'], 'function': 'squeeze'}]
+
 
     def _identify_cols_to_add(self, columns, transformations, cols, dtype, extra_info=None):
         """
@@ -599,6 +617,7 @@ class DataLoader():
         del self.dataset
         gc.collect()
 
+
     def _hard_reload_data(self, time_period, sliding_window_method, x_or_y):
         """
         Load a dataset from scratch.
@@ -619,30 +638,18 @@ class DataLoader():
         self.dataset = loading.read_ts_data(data_dir, self.run_config['time'], x_or_y, dtype='float32', conserve_memory=self.conserve_memory)
         transformations = self.run_config['transformations']
 
-        # Handle static features only for fusion model
-        if (self.run_config['model_type'] == 'long_term_fusion' and 
-            self.run_config['static_columns'] and 
-            isinstance(self.dataset, DiskArray)):
-            static_path = os.path.join(data_dir, 'static_features.csv')
-            if os.path.exists(static_path):
-                try:
-                    static_df = pd.read_csv(static_path)
-                    available_cols = [col for col in self.run_config['static_columns'] 
-                                    if col in static_df.columns]
-                    self.dataset.static_features = static_df[available_cols]
-                    
-                    missing = set(self.run_config['static_columns']) - set(available_cols)
-                    if missing:
-                        logging.warning(f"Missing static features: {missing}")
-                except Exception as e:
-                    logging.error(f"Error loading static features: {str(e)}")
+        # If this is the test set for the iterative model, we want *ALL* Y timestamps, instead of just the most recent
+        if self.run_config['model_type'] == 'iterative' and sliding_window_method == 'test':
+            all_timestamps = list(range(self.run_config['original_y_shape'][1]))
+            transformations = self._amend_y_timestamp_selection(transformations, all_timestamps)
+
 
         self._apply_transformations(x_or_y, transformations)
         self._sample_dataset()
         self._save_ds_to_cache(time_period, sliding_window_method, x_or_y)
         dataset = self.dataset
         del self.dataset
-        if isinstance(dataset, DiskArray):
+        if type(dataset) == DiskArray:
             dataset = dataset.compute()
         return dataset
 
@@ -661,18 +668,13 @@ class DataLoader():
         data_dir = os.path.join(self.run_config['formatted_dir'],
                                 f'{time_period}_long_term_{sliding_window_method}')
 
-        # Select columns for analysis (include static features)
-        analysis_columns = self.run_config['columns'][(~self.run_config['columns']['original_index'].isna()) |
-        (self.run_config['columns']['column'].isin(self.run_config.get('static_columns', [])))].drop(columns=['being_used']).reset_index(drop=True).copy()
+        self.dataset = loading.read_ts_data(data_dir, self.run_config['time'], x_or_y, dtype='float32', conserve_memory=self.conserve_memory)
+        analysis_columns = self.run_config['columns'][
+            ~self.run_config['columns']['original_index'].isna()].drop(columns=['being_used']).reset_index(drop=True).copy()
         analysis_columns['being_used'] = True
-        # Safety check
-        invalid = analysis_columns[
-        analysis_columns['column_group'].isin(['weather', 'destination_cluster'])
-        ]
-        if not invalid.empty:
-            raise ValueError(f"Excluded columns in analysis: {invalid['column'].tolist()}")
-            
+
         analysis_columns, analysis_transformations = self._identify_analysis_transformations(analysis_columns)
+
         self._apply_transformations(x_or_y, analysis_transformations)
 
         dataset = self.dataset
@@ -687,10 +689,6 @@ class DataLoader():
         :param analysis_columns: DataFrame specifying the original columns available
         :return:
         """
-        # 1. Static feature validation
-        if 'vessel_group' not in self.run_config.get('static_columns', []):
-            logging.warning("vessel_group not marked as static - adding to static features")
-            self.run_config.setdefault('static_columns', []).append('vessel_group')
 
         analysis_transformations = []
 
@@ -706,7 +704,8 @@ class DataLoader():
             analysis_columns, analysis_transformations,
             ['base_datetime'])
 
-        # Add bearing angle
+
+        # Add bearing an
         extra_info = {'lat_idx': loading._find_current_col_idx('lat', analysis_columns),
                       'lon_idx':loading._find_current_col_idx('lon', analysis_columns)}
         analysis_columns, analysis_transformations = self._identify_cols_to_add(
@@ -719,18 +718,49 @@ class DataLoader():
         extra_info = {'lat_lon_idxs':
                           [loading._find_current_col_idx('lat', analysis_columns),
                            loading._find_current_col_idx('lon', analysis_columns)]}
-                analysis_columns, analysis_transformations = self._identify_cols_to_add(
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
             analysis_columns, analysis_transformations,
             ['distance_traveled'], 'float32', extra_info
         )
 
+        weather_columns = analysis_columns['column'][analysis_columns['column_group'] == 'weather'].to_list()
+        water_u_columns = [w for w in weather_columns if 'water_u' in w]
+        water_v_columns = [w for w in weather_columns if 'water_v' in w]
+
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['water_u_mean','water_u_std'],'float64',
+            extra_info = {'idx_to_summarize': [loading._find_current_col_idx(c, analysis_columns)
+                                          for c in water_u_columns]}
+
+        )
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['water_v_mean','water_v_std'],'float64',
+            extra_info = {'idx_to_summarize': [loading._find_current_col_idx(c, analysis_columns)
+                                          for c in water_v_columns]}
+
+        )
+
+        water_u_idxs = [loading._find_current_col_idx(c, analysis_columns) for c in water_u_columns]
+        water_u_idxs = np.array(water_u_idxs)[np.argsort(water_u_columns)].tolist()
+
+        water_v_idxs = [loading._find_current_col_idx(c, analysis_columns) for c in water_v_columns]
+        water_v_idxs = np.array(water_v_idxs)[np.argsort(water_v_columns)].tolist()
+
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['mean_current_magnitude','std_current_magnitude'],'float64',
+            extra_info = {'idx_pairs': list(zip(water_u_idxs, water_v_idxs))}
+        )
+
+
         # Convert to pandas
         analysis_transformations += [{'dataset':['x','y'], 'function':'convert_to_pandas',
-                                     'df_columns':analysis_columns['column'][analysis_columns['being_used']].to_list(),
+                                      'df_columns':analysis_columns['column'][analysis_columns['being_used']].to_list(),
                                       'lat_lon_idxs':[loading._find_current_col_idx('lat', self.run_config['columns']),
                                                       loading._find_current_col_idx('lon', self.run_config['columns'])]
-                                      ]
-                                     }]
+                                                    }]
         analysis_columns = pd.concat([
             analysis_columns,
             pd.DataFrame({
@@ -739,36 +769,67 @@ class DataLoader():
                 'being_used': True
             })]).reset_index(drop=True)
 
-        # Condense vessel group
-        vg_columns = analysis_columns[
-        (analysis_columns['column_group'] == 'vessel_group') & 
-        (analysis_columns['dtype'] == 'bool')].sort_values('column')['column'].to_list()
-        
-        if vg_columns: 
-            analysis_columns, analysis_transformations = self._identify_cols_to_add(
-                analysis_columns, analysis_transformations,['vessel_group'], 'category',
-                extra_info={
-                    'ohe_cols': vg_columns,
-                    'feature_type': 'static',
-                    'analysis_options': ['value_counts', 'cross_tab'],
-                    'keep_original': False
-                })
-            analysis_columns, analysis_transformations = self._identify_cols_to_delete(
-                analysis_columns, analysis_transformations, vg_columns)
-        else:
-            logging.warning("No vessel group OHE columns - adding default category")
-            analysis_columns, analysis_transformations = self._identify_cols_to_add(
-                analysis_columns, analysis_transformations,
-                ['vessel_group'], 'category',
-                extra_info={'default_value': 'unknown'})
+        # Look at current *around the boat itself*
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['50_closest_weather_magnitude_mean',
+               '50_closest_weather_magnitude_std', '25_closest_weather_magnitude_mean',
+               '25_closest_weather_magnitude_std', '10_closest_weather_magnitude_mean',
+               '10_closest_weather_magnitude_std', '5_closest_weather_magnitude_mean',
+               '5_closest_weather_magnitude_std', '1_closest_weather_magnitude_mean'],'float64'
+        )
 
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['closest_weather_us', 'closest_weather_vs', 'closest_weather_lats', 'closest_weather_lons'],
+            'object'
+        )
+
+
+        analysis_columns, analysis_transformations = self._identify_cols_to_delete(
+            analysis_columns, analysis_transformations,
+            water_u_columns+water_v_columns)
+
+        # Condense vessel group
+        vg_columns = analysis_columns[analysis_columns['column_group'] == 'vessel_group']['column'].to_list()
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['vessel_group'], 'object',
+            extra_info = {'ohe_cols': vg_columns}
+        )
+        analysis_columns, analysis_transformations = self._identify_cols_to_delete(analysis_columns,
+                                                                                   analysis_transformations,
+                                                                                   vg_columns)
+
+
+        # Condense destination cluster
+        dst_columns = analysis_columns[
+            (analysis_columns['column_group'] == 'destination_cluster')
+            & ~analysis_columns['column'].str.contains('center')
+        ]['column'].to_list()
+        analysis_columns, analysis_transformations = self._identify_cols_to_add(
+            analysis_columns, analysis_transformations,
+            ['destination_cluster'], 'object',
+            extra_info = {'ohe_cols': dst_columns}
+        )
+
+        analysis_columns, analysis_transformations = self._identify_cols_to_delete(analysis_columns,
+                                                                                   analysis_transformations,
+                                                                                   dst_columns)
         bins = [
             ('sog', 4, 16),
             ('cog', 60, None),
             ('mean_bearing_angle',60, None),
             ('std_bearing_angle',30, None),
-            ('distance_traveled', 10, 70)
+            ('distance_traveled', 10, 70),
+            ('water_u_mean',50, 300),
+            ('water_u_std', 50, 300),
+            ('water_v_mean',50, 300),
+            ('water_u_std', 50, 300),
+            ('mean_current_magnitude',50, 400),
+            ('std_current_magnitude', 50, 300)
         ]
+
 
         analysis_columns, analysis_transformations = self._identify_cols_to_add(
             analysis_columns,analysis_transformations,
@@ -777,6 +838,7 @@ class DataLoader():
         )
 
         return analysis_columns, analysis_transformations
+
 
     def _sample_dataset(self):
         """
@@ -796,111 +858,43 @@ class DataLoader():
 
     def _create_columns_df(self):
         """
-        Creates column metadata DataFrame that aligns with formatter.py output.
-        Handles:
-        - Exclusion of weather/water-related features
-        - Proper tagging of static features (loaded from static_features.csv)
-        - Auto-detection of numeric features 
+        Create a DataFrame specifying the columns that are available perfore the data_loading does any processing.
+
+        Includes some supplementary information, such as what group a one-hot encoded column belongs to (e.g. 'weather')
+
+        :return:
         """
-        # Load main features
-        features_path = os.path.join(self.run_config['formatted_dir'], 'features.csv')
-        self.run_config['columns'] = pd.read_csv(features_path)
+        self.run_config['columns'] = pd.read_csv(os.path.join(self.run_config['formatted_dir'], 'features.csv'))
         self.run_config['columns'].index.name = 'original_index'
         self.run_config['columns'] = self.run_config['columns'].reset_index()
-        
-        # Initialize tracking columns
         self.run_config['columns']['being_used'] = True
-        self.run_config['columns']['column_group'] = np.nan
-        
-        # TAG STATIC FEATURES (highest priority)
-        static_features_path = os.path.join(
-            self.run_config['formatted_dir'], 
-            'train_long_term_train', 
-            'static_features.csv')
-        if os.path.exists(static_features_path):
-            static_features = pd.read_csv(static_features_path).columns.tolist()
-            for col in static_features:
-                self.run_config['columns']['column_group'] = np.where(
-                    self.run_config['columns']['column'] == col,
-                    f'static_{col}',
-                    self.run_config['columns']['column_group'])
-        
-        if not set(static_features).issubset(self.run_config['columns']['column']):
-            missing = set(static_features) - set(self.run_config['columns']['column'])
-            logging.warning(f"Static features missing from main data: {missing}")
-        
-        # TAG WEATHER/WATER FEATURES (for exclusion)
-        weather_water_columns = [
-            'weather_is_imputed',
-            'time_since_weather_obs',
-            *self.run_config['columns'][
-            self.run_config['columns']['column'].str.contains('water_')
-            ]['column'].tolist()]
         self.run_config['columns']['column_group'] = np.where(
-            self.run_config['columns']['column'].isin(weather_water_columns),
+            ((self.run_config['columns']['column'] == 'weather_is_imputed')
+             | (self.run_config['columns']['column'] == 'time_since_weather_obs')
+             | (self.run_config['columns']['column'].str.contains('water_'))),
             'weather',
-            self.run_config['columns']['column_group'])
-        
-        # AUTO-DETECT NUMERIC FEATURES
-        numeric_mask = (
-            self.run_config['columns']['column_group'].isna() &  # Only untagged columns
-            self.run_config['columns']['dtype'].isin(['float32', 'float64', 'int16', 'int32']))
-        self.run_config['columns']['column_group'] = np.where(
-            numeric_mask,
-            'numeric',
-            self.run_config['columns']['column_group'])
-        
-        # MARK WEATHER/WATER COLUMNS AS UNUSED
-        self.run_config['columns']['being_used'] = ~self.run_config['columns']['column_group'].eq('weather')
-
-        unclassified = self.run_config['columns'][self.run_config['columns']['column_group'].isna() &
-                                                 self.run_config['columns']['being_used']]
-        if not unclassified.empty:
-            logging.warning(f"Unclassified active columns: {unclassified['column'].tolist()}")
-        return self.run_config['columns']
+            np.nan
+        )
+        for col in self.config.categorical_columns:
+            self.run_config['columns']['column_group'] = np.where(
+                (self.run_config['columns']['column'].str.contains(col)),
+                col,
+                self.run_config['columns']['column_group']
+            )
 
     def _find_shapes(self):
         """
-        Find the dimensions of original datasets before processing, with enhanced memory safety.
-        Now explicitly validates static feature compatibility with the main dataset.
+        Find the number of timestamps and columns in the original datasets, before any processing steps have been performed
+
+        :return:
         """
-        data_dir = os.path.join(self.run_config['formatted_dir'], 'test_long_term_test')
-        
-        try:
-            # Load X data and get shape
-            X = loading.read_ts_data(
-                data_dir, 
-                self.run_config['time'], 
-                'x', 
-                dtype='float32', 
-                conserve_memory=self.conserve_memory
-            )
-            self.run_config['original_x_shape'] = [None] + list(X.shape[1:])
-            
-            # Load Y data and get shape
-            Y = loading.read_ts_data(
-                data_dir,
-                self.run_config['time'],
-                'y',
-                dtype='float32',
-                conserve_memory=self.conserve_memory
-            )
-            self.run_config['original_y_shape'] = [None] + list(Y.shape[1:])
-            
-            # Verify static features alignment (new check)
-            static_path = os.path.join(data_dir, 'static_features.csv')
-            if os.path.exists(static_path):
-                static_features = pd.read_csv(static_path, nrows=1).columns
-                static_in_main = set(static_features) & set(self.run_config['columns']['column'])
-                if not static_in_main:
-                    logging.warning("Static features exist but none appear in main columns DataFrame")
-                    
-        except Exception as e:
-            raise ProcessingError(f"Shape detection failed: {str(e)}")
-        finally:
-            # Ensure cleanup even if errors occur
-            if 'X' in locals():
-                del X
-            if 'Y' in locals():
-                del Y
-            gc.collect()
+        data_dir = os.path.join(self.run_config['formatted_dir'],
+                                f'test_long_term_test')
+        X = loading.read_ts_data(data_dir, self.run_config['time'], 'x', dtype='float32', conserve_memory=self.conserve_memory)
+        self.run_config['original_x_shape'] = [None] + list(X.shape[1:])
+        del X
+
+        Y = loading.read_ts_data(data_dir, self.run_config['time'], 'y', dtype='float32', conserve_memory=self.conserve_memory)
+        self.run_config['original_y_shape'] = [None] + list(Y.shape[1:])
+        del Y
+        gc.collect()
