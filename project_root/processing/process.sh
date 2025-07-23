@@ -1,22 +1,10 @@
-#!/usr/bin/env bash
-
-DATASET="new_york"
-LOG_LEVEL=4
-SEED=47033218
-
-# Run pipeline with error checking
-run_step() {
-    echo "Running: $*"
-    if ! python "$@"; then
-        echo "Error in step: $*"
-        exit 1
-    fi
-}
-
-run_step downloader.py "$DATASET" -l "$LOG_LEVEL" -s
-run_step cleaner.py "$DATASET" -l "$LOG_LEVEL" -s --seed "$SEED" --memory conserve
-run_step interpolator.py "$DATASET" -l "$LOG_LEVEL" -s
-run_step sliding_window.py "$DATASET" -l "$LOG_LEVEL" -s
-run_step formatter.py "$DATASET" -l "$LOG_LEVEL" -s
-
-echo "Pipeline completed successfully"
+## RUN AFTER dataset_config.py HAS BEEN UPDATED:
+python downloader.py new_york -l 4 -s &&
+python cleaner.py   new_york -l 4 -s --seed 47033218 --memory conserve &&
+python interpolator.py new_york -l 4 -s &&
+#  (no current_*/destination_appender steps)
+## RUN ONLY AFTER SETTING DBSCAN PARAMETER VALUES
+#python destination_appender.py new_york -l 4 -s    # still unused
+#python current_appender.py    new_york -l 4 -s    # still unused
+python sliding_window.py      new_york -l 4 -s &&
+python formatter.py           new_york -l 4 -s
