@@ -1,15 +1,23 @@
-name: Ships
+name: ship_trajectory_prediction
 
-conda_env: model_fitting_environment.yml
+conda_env: environment.yml  # Points to your updated environment file
 
 entry_points:
-  test_time_gaps:
+  train_model:
     parameters:
-      time_gap: float
-      dataset_name: str
-    command: 'python tests/fit_and_evaluate_model.py {time_gap} {dataset_name}'
-  create_data:
+      model_type: {type: str, choices: ['bi_lstm', 'bi_lstm_attention', 'long_term_fusion']}
+      dataset_name: {type: str, choices: ['new_york', 'san_francisco']}  # Your dataset names
+      hours_out: {type: int, default: 3, choices: [1, 2, 3]}
+    command: 'python src/train.py --model_type {model_type} --dataset_name {dataset_name} --hours_out {hours_out}'
+  
+  tune_model:
     parameters:
-      time_gap: float
-      dataset_name: str
-    command: 'python tests/create_data.py {time_gap} {dataset_name}'
+      model_type: {type: str, choices: ['bi_lstm', 'bi_lstm_attention', 'long_term_fusion']}
+      dataset_name: {type: str, choices: ['new_york', 'san_francisco']}
+    command: 'python src/tune.py --model_type {model_type} --dataset_name {dataset_name}'
+  
+  preprocess_data:
+    parameters:
+      dataset_name: {type: str, choices: ['new_york', 'san_francisco']}
+      time_gap: {type: int, default: 30}
+    command: 'python src/preprocess.py --dataset_name {dataset_name} --time_gap {time_gap}'
