@@ -50,7 +50,7 @@ class Interpolator(ProcessingStep):
         ]
         self.stable_columns = [
             'mmsi',
-            'vessel_type',
+            # 'vessel_type',
             # 'length',
             # 'width',
             'vessel_group',
@@ -176,15 +176,6 @@ class Interpolator(ProcessingStep):
                 # If this column is categorical and can change, then use the most recent value
                 interpolated[col] = [track[col].iloc[int(i)] for i in most_recent_idx]
             elif col in self.stable_columns:
-                # ===== ADD VESSEL TYPE VALIDATION HERE =====
-                if col == 'vessel_type':
-                    # Verify vessel type doesn't change mid-track
-                    unique_types = track[col].unique()
-                    if len(unique_types) > 1:
-                        logging.warning(
-                            f"MMSI {track['mmsi'].iloc[0]} has changing vessel types: {unique_types}. "
-                            f"Using first value: {unique_types[0]}"
-                        )
                 # If this column is categorical but should be stable over the whole dataset, just use the first value
                 interpolated[col] = track[col].iloc[0]
             else:
