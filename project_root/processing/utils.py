@@ -1,10 +1,10 @@
-
+import os
+import re
 import shutil
 import urllib
 
 import pandas as pd
 import utm
-import re
 
 from calendar import monthrange
 from dateutil import rrule
@@ -14,48 +14,44 @@ def get_zones_from_coordinates(corner_1, corner_2):
     """
     Get UTM zones to download, based on lat/lon coordinates
 
-    :param corner_1: Lat/lon pair (lat, lon)
-    :param corner_2: Lat/lon pair (lat, lon)
-    :return: list of UTM zones to download
+    :param corner_1: Lat/lon pair
+    :param corner_2: Lat/lon pair
+    :return: range of zones to download
     """
     _, _, zone_1, _ = utm.from_latlon(*corner_1)
     _, _, zone_2, _ = utm.from_latlon(*corner_2)
-    
-    if zone_1 > 19 or zone_2 > 19:
-        raise ValueError("One or both coordinates are outside the MarineCadastre.gov supported UTM zones (1–19).")
-    
-    return list(range(min(zone_1, zone_2), max(zone_1, zone_2) + 1))
+    if zone_1 > 19:
+        raise ValueError(f'Corner 1 {corner_1} is outside data available on MarineCadastre.gov')
+    if zone_2 > 19:
+        raise ValueError(f'Corner 2 {corner_2} is outside data available on MarineCadastre.gov')
+    zones_to_download = range(min(zone_1, zone_2), max(zone_1, zone_2) + 1)
+    return zones_to_download
 
-# ---- Usage for New York only ----
-ny_config = datasets['new_york']
-zones = get_zones_from_coordinates(ny_config.corner_1, ny_config.corner_2)
 
-print("UTM zones to download:", zones)  # Expected: [18,19]
-
-def get_file_specifier(year, month, zone_num=None, day_num=None, extension="csv"):
-    """Generate MarineCadastre.gov AIS data filename based on year and month.
-    
-    Args:
-        year: Integer year (2015-2019)
-        month: Integer month (1-12)
-        zone_num: Required for 2015-2017 data, the zone number (1-20)
-        day_num: Required for 2018+ data, the day of month (1-31)
-        extension: File extension (default "csv")
-        
-    Returns:
-        String filename in MarineCadastre.gov format
-        
-    Raises:
-        AssertionError: If required parameters are missing for the given year
+def get_file_specifier(year, month, zone_or_day, extension):
     """
-    if year <= 2017:
-        assert zone_num is not None, "Zone number required for 2015-2017 data"
-        assert 1 <= zone_num <= 20, "Zone number must be between 1-20"
-        specifier = f"AIS_{year}_{month:02d}_Zone{zone_num:02d}.{extension}"
+    Get the specific file name for this year, month, and zone or day
+
+    Files from 2017 and prior are split by utm zone, while files from 2018 and on are split by day.
+
+    This unfortunately means that all 2018 AIS messages need to be downloaded.
+
+    :param year:
+    :param month:
+    :param zone:
+    :param extension:
+    :return:
+    """
+    if year in (2015, 2016, 2017):
+        specifier = f'AIS_{year}_{month:02d}_Zone{zone_or_day:02d}.{extension}'
+    elif year in (2018, 2019, 2020, 2021):
+        specifier = f'AIS_{year}_{month:02d}_{zone_or_day:02d}.{extension}'
     else:
-        assert day_num is not None, "Day number required for 2018+ data"
-        assert 1 <= day_num <= 31, "Day number must be between 1-31"
-        specifier = f"AIS_{year}_{month:02d}_{day_num:02d}.{extension}"
+        raise ValueError(f"I'm not sure how to format the specifier for year {year}; "
+                         f"Check https://coast.noaa.gov/htdata/CMSP/AISDataHandler/{year}/index.html to edit "
+                         f"me to do so, and make sure to also edit get_info_from_specifier()")
+
+    specifier = urllib.parse.urljoin(f'{year}/', specifier)
     return specifier
 
 
@@ -65,32 +61,24 @@ def get_info_from_specifier(file_name):
 
     The file specifier contains the year, month, zone/day, and file extension for the file in question. This splits up
     a file specifier into these parts. Whether the third piece of information is the zone or day depends on what year
-    the file is from (2015-2017 will contain the zone, while 2018+ will contain the day, as this is how the files are
+    the file is from (2015-2017 will contain the zone, will 2018+ will contain the day, as this is how the files are
     organized on MarineCadastre.gov).
 
-    :param file_name: The filename to parse (e.g., "AIS_2015_01_Zone18.csv" or "AIS_2018_01_01.csv")
-    :return: tuple of (year, month, zone_or_day, extension)
-    :raises: ValueError if the filename format is not recognized
+    :return: year, month, zone or day, extension
     """
-    # Match 2015-2017 format: AIS_YYYY_MM_ZoneZZ.csv
-    zone_match = re.search(r'AIS_([0-9]{4})_([0-9]{2})_Zone([0-9]{2})\.(.+)', file_name)
-    if zone_match:
-        year = int(zone_match.group(1))
-        if year > 2017:
-            raise ValueError(f"Zone format not valid for year {year} (should be day format)")
-        return int(zone_match.group(1)), int(zone_match.group(2)), int(zone_match.group(3)), zone_match.group(4)
-    
-    # Match 2018+ format: AIS_YYYY_MM_DD.csv
-    day_match = re.search(r'AIS_([0-9]{4})_([0-9]{2})_([0-9]{2})\.(.+)', file_name)
-    if day_match:
-        year = int(day_match.group(1))
-        if year <= 2017:
-            raise ValueError(f"Day format not valid for year {year} (should be zone format)")
-        return int(day_match.group(1)), int(day_match.group(2)), int(day_match.group(3)), day_match.group(4)
-    
-    raise ValueError('File name format not recognized. Expected either: '
-                   '"AIS_YYYY_MM_ZoneZZ.ext" (2015-2017) or '
-                   '"AIS_YYYY_MM_DD.ext" (2018+)')
+    split = re.search('[0-9]{4}.+AIS_([0-9]{4})_([0-9]{2})_(Zone)?([0-9]{2}|\*)\.(.+)', file_name)
+    if split:
+        year = split.group(1)
+        month = split.group(2)
+        zone_or_day = split.group(4)
+        extension = split.group(5)
+    else:
+        raise ValueError('This file does not have a known specifier format; the year, month, zone/day, and extension '
+                         'cannot be found')
+
+    return year, month, zone_or_day, extension
+
+
 def all_specifiers(zones, years, extension, dir=None):
     """
     Get all file specifiers for the relevant zones and years
@@ -202,29 +190,30 @@ def clear_path(path):
             os.remove(path)
         else:
             shutil.rmtree(path)
+
 def get_min_max_times(specifier):
     """
     Get the first/last possible time for AIS messages contained in a file
 
     :param specifier: file information
-    :return: tuple of (min_time, max_time) as pandas Timestamps
-    :raises: ValueError if year is not supported
+    :return:
     """
     year, month, zone_or_day, extension = get_info_from_specifier(specifier)
-    
-    if year <= 2017:
-        # Zone-based files (monthly)
+    year = int(year)
+    month = int(month)
+
+    if year in (2015, 2016, 2017):
         min_time = pd.to_datetime(f'{year}-{month}-01 00:00:00')
         _, last_day = monthrange(year, month)
         max_time = pd.to_datetime(f'{year}-{month}-{last_day} 23:59:59')
-    elif 2018 <= year <= 2021:
-        # Day-based files (daily)
+
+
+    elif year in (2018, 2019, 2020, 2021):
         day = zone_or_day
         min_time = pd.to_datetime(f'{year}-{month}-{day} 00:00:00')
         max_time = pd.to_datetime(f'{year}-{month}-{day} 23:59:59')
+
     else:
-        raise ValueError(f'Year {year} not supported (must be 2015-2021)')
+        raise ValueError('Year unaccounted for')
 
     return min_time, max_time
-
-  
