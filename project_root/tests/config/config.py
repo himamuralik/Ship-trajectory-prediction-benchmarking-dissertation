@@ -1,4 +1,3 @@
-from processing.config.config import static_columns
 from socket import gethostname
 import os
 
@@ -36,7 +35,7 @@ global box_and_year_dir
 
 # Name of dataset being used
 global dataset_name
-dataset_name = 'formatted_data_with_stride_3'
+dataset_name = 'formatted'
 
 
 # Whether logging should be used
@@ -47,14 +46,7 @@ logging = True
 global machine
 host = gethostname()
 
-@property 
-    def models_using_static_features(self):
-        """Returns set of model types that should use static features"""
-        return {
-            'fusion',  # Fusion models always use static features
-        }
-        
- @property
-    def non_static_models(self):
-        """Models that should never use static features"""
-        return {'bi_lstm', 'bi_lstm_attention'}
+# Categorical columns that are one hot encoded. Only change this if you change preprocessing to add in other
+# columns.
+global categorical_columns
+categorical_columns = ['vessel_group']
