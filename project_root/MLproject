@@ -18,6 +18,6 @@ entry_points:
   
   preprocess_data:
     parameters:
-      dataset_name: {type: str, choices: ['new_york', 'san_francisco']}
+      dataset_name: {type: str, choices: ['new_york']}
       time_gap: {type: int, default: 30}
     command: 'python src/preprocess.py --dataset_name {dataset_name} --time_gap {time_gap}'
