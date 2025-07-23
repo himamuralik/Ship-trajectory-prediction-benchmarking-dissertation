@@ -1,4 +1,5 @@
 import numpy as np
+
 from loading.disk_array import DiskArray
 from loading.loading import _find_current_col_idx
 from config import config
@@ -43,19 +44,14 @@ class Normalizer():
                 'min': 1,
                 'max': 12
             }
+
         }
-        
-        # Only consider columns that are being used and not weather/destination cluster columns
-        cols_to_use = columns['column'][columns['being_used'] & 
-                      ~columns['column_group'].isin(['weather', 'destination_cluster'])]
-        
+        cols_to_use = columns['column'][columns['being_used']]
         non_bools = cols_to_use[columns.dtype != 'bool']
         multi_cols = ['speed','water','mmsi_neighbor','lat_neighbor','lon_neighbor','time_since_neighbor']
         ranges = {k: [np.Inf, -np.Inf] for k in multi_cols}
-        
         if type(X) == DiskArray:
             mins, maxes = X._calculate_min_max()
-            
         for col in non_bools:
             if col not in normalization_factors.keys():
                 idx = _find_current_col_idx(col, columns)
@@ -90,9 +86,7 @@ class Normalizer():
         :param normalization_factors: Normalization factors
         :return: Normalized data
         """
-        # Add static features validation here
-        if hasattr(X, 'static_features') and X.static_features is not None:
-            logging.info("Normalizer detected static features - these will not be normalized")
+
         if len(data.shape) == 3:
             for col in normalization_factors.values():
                 if col['idx'] < data.shape[-1]:
@@ -102,6 +96,7 @@ class Normalizer():
                         data[:, :, col['idx']] = dist_above_min / range
                     else: # if the variable doesn't vary at all (which can happen when debugging), just set it to 0
                         data[:,:, col['idx']] = 0
+
         else:
             for col in normalization_factors.values():
                 if col['idx'] < data.shape[-1]:
