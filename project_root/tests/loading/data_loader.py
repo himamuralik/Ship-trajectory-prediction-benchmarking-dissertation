@@ -345,8 +345,16 @@ class DataLoader():
     def _hard_reload_data(self, time_period, sliding_window_method, x_or_y):
         data_dir = os.path.join(self.run_config['formatted_dir'],
                                 f'{time_period}_long_term_{sliding_window_method}')
-        self.dataset = loading.read_ts_data(data_dir, self.run_config['time'], x_or_y,
-                                            dtype='float32', conserve_memory=self.conserve_memory)
+        self.dataset = loading.read_ts_data(data_dir,
+                                            self.run_config['time'],
+                                            x_or_y,
+                                            dtype='float32',
+                                            conserve_memory=self.conserve_memory,
+                                            is_fusion_model=True,
+                                            static_features_path=os.path.join(
+                                                self.run_config['formatted_dir'],
+                                                'static_features.csv' ) )
+
         transformations = list(self.run_config['transformations'])
         # no full-horizon conditional here since future_mode only affects the initial transform
 
@@ -363,8 +371,15 @@ class DataLoader():
     def _load_data_for_analysis(self, time_period, sliding_window_method, x_or_y):
         data_dir = os.path.join(self.run_config['formatted_dir'],
                                 f'{time_period}_long_term_{sliding_window_method}')
-        self.dataset = loading.read_ts_data(data_dir, self.run_config['time'], x_or_y,
-                                            dtype='float32', conserve_memory=self.conserve_memory)
+        self.dataset = loading.read_ts_data(data_dir,
+                                            self.run_config['time'],
+                                            x_or_y,
+                                            dtype='float32',
+                                            conserve_memory=self.conserve_memory,
+                                            is_fusion_model=True,
+                                            static_features_path=os.path.join(
+                                                self.run_config['formatted_dir'],
+                                                'static_features.csv' ) )
         analysis_cols = self.run_config['columns'][
             ~self.run_config['columns']['original_index'].isna()
         ].drop(columns=['being_used']).reset_index(drop=True).copy()
@@ -412,6 +427,11 @@ class DataLoader():
                 self.run_config['columns']['column'].str.contains(col),
                 col, self.run_config['columns']['column_group']
             )
+        # ─── Build and save your vessel_group one‑hot matrix ───
+       raw_meta = pd.read_csv(os.path.join(self.config.data_directory, 'raw_vessel_metadata.csv'))
+       vgrp_ohe = pd.get_dummies(raw_meta['vessel_group'], prefix='vessel_group')
+       vgrp_ohe.to_csv(os.path.join(self.run_config['formatted_dir'], 'static_features.csv'),index=False)
+
 
     def _find_shapes(self):
         data_dir = os.path.join(self.run_config['formatted_dir'], 'test_long_term_test')
