@@ -1,4 +1,3 @@
-
 import argparse
 import logging
 import os
@@ -41,6 +40,7 @@ class Cleaner(ProcessingStep):
         self.validation_fraction = validation_fraction
         self.original_lengths = {}
         self.unneeded_columns = [
+            'vessel_type',
             'status',
             'length',
             'width',
@@ -48,7 +48,9 @@ class Cleaner(ProcessingStep):
             'cargo',
             'transceiver_class'
         ]
+
         logging.info(f'Not using columns {self.unneeded_columns}')
+
 
     def load(self):
         """
@@ -132,9 +134,9 @@ class Cleaner(ProcessingStep):
             unneeded_columns = self.unneeded_columns
         else:
             unneeded_columns = [c for c in self.unneeded_columns if c != 'transceiver_class']
-        # Safely drop only columns that exist and aren't MMSI
-        columns_to_drop = [col for col in unneeded_columns if col in partition.columns and col != 'mmsi']
-    return partition.drop(columns=columns_to_drop, errors='ignore')
+
+        partition = partition.drop(columns=unneeded_columns)
+        return partition
 
     def _load_files(self, files, name):
         """
@@ -164,7 +166,13 @@ class Cleaner(ProcessingStep):
         # If the unified version already exists, then no need to recreate it (otherwise, do so).
         if not os.path.exists(tmp_dir_2):
             if os.path.exists(tmp_dir):
+                # Since the Zone unification has already been done, amend the file names to reflect this
+                # Replace 'Zone10' or 'Zone11' with 'Zone*'
+                files = [re.sub(r'Zone[0-9]{1,2}','Zone*', f) for f in files]
+                # Take the unique file names
                 files = np.unique(files).tolist()
+                # Replace 'Zone*' with 'AllZones'
+                files = [re.sub('Zone\*','AllZones', f) for f in files]
                 tmp_files = [os.path.join(tmp_dir, os.path.basename(p)) for p in files]
             else:
                 # Keep track of the new file names
@@ -181,7 +189,8 @@ class Cleaner(ProcessingStep):
                 total_empirical_speed = 0
                 total_short_tracks = 0
 
-                #Unique files
+                # Condense zones so that they are read in as one (dask can handle a wildcard character)
+                files = [re.sub(r'Zone[0-9]{1,2}','Zone*', f) for f in files]
                 files = np.unique(files).tolist()
 
                 # Iterate through the files, filtering each one
@@ -206,8 +215,7 @@ class Cleaner(ProcessingStep):
                     # Remove any messages from vessel types that we aren't using
                     data, unwanted_vts = self._remove_unwanted_vessel_types(data)
                     total_unwanted_vts += unwanted_vts
-                     # NEW: Verify vessel type consistency before proceeding
-                     data = self._verify_vessel_type_consistency(data)
+
                     # Remove any messages that don't have status codes we are interested in
                     data, unwanted_statuses = self._remove_unwanted_statuses(data)
                     total_unwanted_statuses += unwanted_statuses
@@ -239,6 +247,7 @@ class Cleaner(ProcessingStep):
 
                     # Save to temporary path
                     fname = os.path.basename(file)
+                    fname = re.sub('Zone\*', 'AllZones', fname)
                     tmp_path = os.path.join(tmp_dir, fname)
                     data.to_parquet(tmp_path, engine='pyarrow',index=False)
                     tmp_files += [tmp_path]
@@ -280,6 +289,7 @@ class Cleaner(ProcessingStep):
                              f'Dataset now contains {good_or_unknown_track_length:,} messages.')
 
             gc.collect()
+
             # Read filtered files from temp paths into a single dataframe
             dataset = dd.read_parquet(tmp_files)
             if args.debug:
@@ -303,7 +313,7 @@ class Cleaner(ProcessingStep):
             del dataset
             gc.collect()
 
-            # Load in dataset
+        # Load in dataset
         dataset = dd.read_parquet(tmp_dir_2)
 
         return dataset
@@ -347,7 +357,8 @@ class Cleaner(ProcessingStep):
             ]
         num_invalid_mmsis = original_len - len(partition)
         return partition, num_invalid_mmsis
-     
+
+
     def _correct_negatives(self, partition):
         """
         Correct negative SOG and COG values, as specified in the MarineCadastre.gov FAQ
@@ -578,53 +589,32 @@ class Cleaner(ProcessingStep):
 
         num_unwanted_statuses = original_len - len(partition)
         return partition, num_unwanted_statuses
-        
+
     def _remove_unwanted_vessel_types(self, partition):
-        """Process vessel types into consistent vessel groups and mark as static"""
-        # Map numeric vessel types to vessel groups
-        type_to_group = {
-        int(vt): group.lower().replace('/', ' or ') 
-        for _, (group, vt, _) in config.types.iterrows() }
-        # Convert and mark as static
-        partition['static_vessel_group'] = (
-        partition['vessel_type']
-        .fillna(-1)
-        .astype(int)
-        .map(type_to_group)   )
-         # Verify consistency
-         partition = self._verify_vessel_consistency(partition)
-         # Minimal invalid types warning (3 lines)
-         if invalid := ~partition['static_vessel_group'].isin(config.vessel_types):
-             logging.warning(f"Found {invalid.sum()} invalid vessel type messages. Sample MMSIs: "
-                       f"{partition.loc[invalid, 'mmsi'].unique()[:5].tolist()}")
-    # Filter to allowed groups
-    return partition[partition['static_vessel_group'].isin(config.vessel_types)]
-    
-   def _verify_vessel_consistency(self, partition):
-       """Verify that each vessel has only one static_vessel_group assignment."""
-       if 'static_vessel_group' not in partition.columns or 'mmsi' not in partition.columns:
-           return partition
-        # Count unique static groups per vessel
-         group_counts = partition.groupby('mmsi')['static_vessel_group'].nunique()
-         inconsistent = group_counts[group_counts > 1]
-         if not inconsistent.empty:
-             # Get sample inconsistent vessels with their type changes
-             sample_inconsistent = partition[partition['mmsi'].isin(inconsistent.index[:5])]
-             sample_details = sample_inconsistent.groupby('mmsi')['static_vessel_group'].unique()
-             logging.warning(
-             f"Found {len(inconsistent)} vessels with inconsistent static_vessel_groups. "
-             f"First 5 MMSIs and their types: {sample_details.to_dict()}. "
-             f"Using most frequent group for each vessel." )
-        
-             # Assign most frequent static group to inconsistent vessels
-             mode_groups = ( partition.groupby('mmsi')['static_vessel_group'].apply(lambda x: x.mode()[0] if not x.mode().empty else 'unknown') )
-             partition['static_vessel_group'] = partition['mmsi'].map(mode_groups)
-             # Log resolution
-             resolved_types = partition[partition['mmsi'].isin(inconsistent.index)] \.groupby('mmsi')['static_vessel_group'].first()
-             logging.info(f"Resolved inconsistent vessel types. Final assignments for sample: {resolved_types.head().to_dict()}" )
-    return partition
- 
-       
+        """
+        Remove messages from unwanted vessel types.
+
+        Vessels must be of type Pleasure Craft/Sailing, Tug Tow, Passenger, Cargo, Tanker, or Fishing
+
+        Because vessel types are in the MarineCadastre's dataset as a code, this uses the mapping in
+        config/vessel_type_codes.csv
+
+        :param partition: Dataset to process
+        :return: The dataset with unwanted messages removed
+        """
+        original_len = len(partition)
+
+        # Replace text numeric type with text ones
+        replacement_dict = {VT: G.lower().replace('/', ' or ') for i, (G, VT, d) in config.types.iterrows()}
+        partition['vessel_type'] = partition['vessel_type'].fillna(-1).astype(int).astype(str)
+        partition['vessel_group'] = partition['vessel_type'].replace(replacement_dict)
+
+        # Filter out vessel types we don't want
+        partition = partition[partition['vessel_group'].isin(config.vessel_types)]
+
+        num_unwanted_vts = original_len - len(partition)
+        return partition, num_unwanted_vts
+
     def _create_track_ids(self, partition):
         """
         Go through dataset and identify trajectories.
@@ -748,16 +738,6 @@ class Cleaner(ProcessingStep):
             self.datasets[dataset_name] = self.datasets[dataset_name].map_partitions(self._process_partition,
                                                                                      meta=output_meta)
             self.datasets[dataset_name] = self.datasets[dataset_name].reset_index().set_index('track', sorted=True)
-             # Compute actual size (be careful with large datasets)
-             pop_size = len(self.datasets[dataset_name].compute()) if args.debug else None
-            if pop_size:
-                logging.info(f"Final population size for {dataset_name}: {pop_size:,}")
-            if not hasattr(config, 'dataset_stats'):
-                config.dataset_stats = {}
-            config.dataset_stats[dataset_name] = {
-                'population_size': pop_size,
-                'timestamp': pd.Timestamp.now()
-            }
 
             if dataset_name == 'test':
                 self._save_dataset(dataset_name)
