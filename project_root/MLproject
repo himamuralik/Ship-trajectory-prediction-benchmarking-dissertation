@@ -1,12 +1,12 @@
 name: ship_trajectory_prediction
 
-conda_env: environment.yml  # Points to your updated environment file
+conda_env: model_fitting_environment.yml  # Points to your updated environment file
 
 entry_points:
   train_model:
     parameters:
       model_type: {type: str, choices: ['bi_lstm', 'bi_lstm_attention', 'long_term_fusion']}
-      dataset_name: {type: str, choices: ['new_york', 'san_francisco']}  # Your dataset names
+      dataset_name: {type: str, choices: ['new_york']}  # Your dataset names
       hours_out: {type: int, default: 3, choices: [1, 2, 3]}
     command: 'python src/train.py --model_type {model_type} --dataset_name {dataset_name} --hours_out {hours_out}'
   
