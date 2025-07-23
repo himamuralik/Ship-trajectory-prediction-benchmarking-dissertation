@@ -1,260 +1,114 @@
 import tensorflow as tf
-from typing import Dict, List, Tuple, Optional, Union
-import numpy as np
 from haversine import haversine_vector, Unit
-from models.implementation.losses import TrajectoryLoss
-from models.implementation.model_runner import TrajectoryModelRunner
+from keras import Input, Model
+from keras.layers import LSTM, Bidirectional, Flatten, Dense, Dropout
+from keras.optimizer_v2.adam import Adam as AdamKeras
+from keras.regularizers import L1, L2
 
-class BiLSTMTrajectoryPredictor(TrajectoryModelRunner):
+from loading import Normalizer
+from models.losses import HaversineLoss
+from models.model_runner import ModelRunner
+
+
+class BiLSTMModelRunner(ModelRunner):
     """
-    TensorFlow Bi-LSTM Model for Trajectory Prediction with standardized loss:
-    - Uses TrajectoryLoss for consistent loss calculation
-    - Implements TrajectoryModelRunner interface
-    - Pure sequence-to-value architecture
+    Pure Bi‑LSTM trunk → dense head.
     """
+    def __init__(
+        self,
+        n_rnn_layers: int,
+        rnn_units: int,
+        n_dense_layers: int,
+        dense_units: int,
+        direction: str,
+        ts_length: int,
+        n_feats: int,
+        output_dim: int,
+        normalization_factors: dict,
+        y_idxs: list,
+        columns,
+        learning_rate: float,
+        rnn_to_dense: str = "last",          # "all" or "last"
+        regularization: str = None,          # "dropout", "l1", "l2", or None
+        regularization_app: str = None,      # e.g. "recurrent", "bias", etc.
+        regularization_coeff: float = None
+    ):
+        # Direction
+        if direction not in ("forward_only", "bidirectional"):
+            raise ValueError("direction must be 'forward_only' or 'bidirectional'")
+        self.direction = direction
 
-    def __init__(self,
-                 input_ts_length: int,
-                 input_num_features: int,
-                 output_num_features: int,
-                 lstm_hidden_dim: int,
-                 lstm_num_layers: int,
-                 dense_layer_size: int,
-                 num_dense_layers: int,
-                 dropout: float = 0.0,
-                 regularization: str = None,
-                 reg_coefficient: float = 0.0,
-                 learning_rate: float = None,
-                 beta_1: float = None,
-                 beta_2: float = None,
-                 epsilon: float = None,
-                 norm_factors: Dict = None,
-                 use_mse_loss: bool = False,
-                 mse_weight: float = 0.1,
-                 **kwargs):
-        """
-        Args:
-            norm_factors: Dictionary containing min/max values for denormalization
-                         Format: {'lat': {'min': ..., 'max': ...}, 
-                                 'lon': {'min': ..., 'max': ...}}
-            use_mse_loss: Whether to include MSE as auxiliary loss
-            mse_weight: Weight for MSE component in combined loss
-        """
-        super().__init__()
-        self._supports_static_features = False
-        
-        # Store normalization factors
-        self.norm_factors = norm_factors or {
-            'lat': {'min': -90, 'max': 90},
-            'lon': {'min': -180, 'max': 180}
-        }
+        # Hyperparameters
+        self.n_rnn_layers = n_rnn_layers
+        self.rnn_units    = rnn_units
+        self.n_dense_layers = n_dense_layers
+        self.dense_units  = dense_units
+        self.ts_length    = ts_length
+        self.n_feats      = n_feats
+        self.output_dim   = output_dim
+        self.rnn_to_dense = rnn_to_dense
 
-        # Architecture parameters
-        self.input_ts_length = input_ts_length
-        self.input_num_features = input_num_features
-        self.output_num_features = output_num_features
-        self.lstm_hidden_dim = lstm_hidden_dim
-        self.lstm_num_layers = lstm_num_layers
-        self.dense_layer_size = dense_layer_size
-        self.num_dense_layers = num_dense_layers
-        self.dropout_rate = dropout
+        # Regularization
+        self._config_regularization(regularization,
+                                    regularization_app,
+                                    regularization_coeff)
 
-        # Optimizer parameters
-        self.learning_rate = learning_rate
-        self.beta_1 = beta_1
-        self.beta_2 = beta_2
-        self.epsilon = epsilon
+        # Loss & optimizer
+        self.normalization_factors = normalization_factors
+        self.y_idxs       = y_idxs
+        self.columns      = columns
+        self.optimizer    = AdamKeras(learning_rate=learning_rate)
+        self.loss         = HaversineLoss(normalization_factors).haversine_loss
 
-        # Regularization config
-        self.regularizer = self._get_regularizer(regularization, reg_coefficient)
+        # Build & compile
+        self._build_model()
+        self.compile()
 
-        # Loss configuration
-        self.loss_fn = TrajectoryLoss(
-            normalization_factors=self.norm_factors,
-            use_mse=use_mse_loss,
-            mse_weight=mse_weight
-        )
+    def _config_regularization(self, method, app, coeff):
+        if method == "dropout":
+            if app == "recurrent":
+                self.rnn_reg = {"recurrent_dropout": coeff}
+                self.dense_dropout = 0.0
+            else:
+                self.rnn_reg = {"dropout": coeff}
+                self.dense_dropout = coeff
+            self.dense_reg = {}
+        elif method in ("l1", "l2"):
+            cls = L1 if method=="l1" else L2
+            key = f"{app}_regularizer" if app else "kernel_regularizer"
+            self.rnn_reg = {key: cls(coeff)}
+            self.dense_reg = {key: cls(coeff)}
+            self.dense_dropout = 0.0
+        else:
+            self.rnn_reg = {}
+            self.dense_reg = {}
+            self.dense_dropout = 0.0
 
-        # Build model layers
-        self._build_layers()
-        self._compile_model()
+    def _build_model(self):
+        # --- recurrent trunk ---
+        x_in = Input(shape=(self.ts_length, self.n_feats), name="seq_input")
+        x = x_in
+        for i in range(self.n_rnn_layers):
+            return_seq = (self.rnn_to_dense == "all") or (i < self.n_rnn_layers - 1)
+            cell = LSTM(self.rnn_units, return_sequences=return_seq, **self.rnn_reg)
+            x = Bidirectional(cell)(x) if self.direction=="bidirectional" else cell(x)
 
-    def _get_regularizer(self, reg_type: str, coefficient: float):
-        """Configure regularization"""
-        if reg_type == 'l1':
-            return tf.keras.regularizers.L1(coefficient)
-        elif reg_type == 'l2':
-            return tf.keras.regularizers.L2(coefficient)
-        return None
+        if self.rnn_to_dense=="all":
+            x = Flatten(name="flatten_seq")(x)
+        else:
+            x = x[:, -1, :]   # last timestep
 
-    def _compile_model(self):
-        """Compile with current parameters"""
-        optimizer_config = {
-            'learning_rate': self.learning_rate,
-            'beta_1': self.beta_1,
-            'beta_2': self.beta_2,
-            'epsilon': self.epsilon
-        }
-        optimizer_config = {k: v for k, v in optimizer_config.items() if v is not None}
-        
-        self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(**optimizer_config),
-            loss=self.loss_fn,
-            metrics=[self.loss_fn.haversine_loss, 'mse']
-        )
+        # --- final dense head ---
+        for _ in range(self.n_dense_layers):
+            x = Dense(self.dense_units, activation="relu", **self.dense_reg)(x)
+            x = Dropout(self.dense_dropout)(x)
 
-    def _build_layers(self):
-        """Build the BiLSTM model architecture"""
-        inputs = tf.keras.layers.Input(shape=(self.input_ts_length, self.input_num_features))
-        
-        # BiLSTM layers
-        x = inputs
-        for i in range(self.lstm_num_layers):
-            return_sequences = (i < self.lstm_num_layers - 1)  # Only return sequences for intermediate layers
-            x = tf.keras.layers.Bidirectional(
-                tf.keras.layers.LSTM(
-                    self.lstm_hidden_dim,
-                    return_sequences=return_sequences,
-                    kernel_regularizer=self.regularizer,
-                    recurrent_regularizer=self.regularizer
-                )
-            )(x)
-            if self.dropout_rate > 0:
-                x = tf.keras.layers.Dropout(self.dropout_rate)(x)
-        
-        # Dense layers
-        for _ in range(self.num_dense_layers):
-            x = tf.keras.layers.Dense(
-                self.dense_layer_size,
-                activation='relu',
-                kernel_regularizer=self.regularizer
-            )(x)
-        
-        # Output layer
-        outputs = tf.keras.layers.Dense(self.output_num_features)(x)
-        
-        self._model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        out = Dense(self.output_dim, activation="linear", name="pred_lat_lon")(x)
+        self.model = Model(inputs=x_in, outputs=out, name="bilstm_model")
 
-    def call(self, inputs, training=None):
-        """Forward pass"""
-        return self._model(inputs, training=training)
-
-    @property
-    def model(self):
-        """Get the underlying Keras model"""
-        return self._model
-
-    def predict(self, 
-               x: np.ndarray,
-               static_features: Optional[np.ndarray] = None,
-               return_metrics: bool = False,
-               batch_size: int = 32) -> Dict[str, Union[np.ndarray, float]]:
-        """
-        Enhanced prediction interface matching base class
-        Args:
-            x: Input array of shape (n_samples, seq_len, input_dim)
-            static_features: Ignored (for interface compatibility)
-            return_metrics: Whether to compute evaluation metrics
-            batch_size: Batch size for prediction
-        Returns:
-            Dictionary containing predictions and optional metrics
-        """
-        dataset = tf.data.Dataset.from_tensor_slices(x)
-        dataset = dataset.batch(batch_size)
-        
-        normalized_preds = []
-        for batch in dataset:
-            normalized_preds.append(self.model(batch, training=False))
-        normalized_preds = tf.concat(normalized_preds, axis=0).numpy()
-        
-        # Use the loss function's denormalization method
-        predictions = self.loss_fn._denormalize(normalized_preds)
-        
-        results = {'predictions': predictions}
-        
-        if return_metrics and hasattr(x, 'true_values'):
-            true_values = self.loss_fn._denormalize(x.true_values)
-            results.update({
-                'haversine_distances': self.loss_fn.haversine_loss(
-                    x.true_values, normalized_preds, reduce_mean=False
-                ).numpy(),
-                'mse': tf.keras.losses.mean_squared_error(
-                    x.true_values, normalized_preds
-                ).numpy().mean()
-            })
-        
-        return results
-
-    def evaluate(self,
-                dataset: tf.data.Dataset,
-                static_dataset: Optional[tf.data.Dataset] = None) -> Dict[str, float]:
-        """
-        Evaluation matching base class interface
-        Args:
-            dataset: Main input dataset
-            static_dataset: Ignored (for interface compatibility)
-        Returns:
-            Dictionary of evaluation metrics
-        """
-        return self.model.evaluate(dataset, return_dict=True)
-
-    def save(self, 
-            filepath: str, 
-            include_static_config: bool = True,
-            **kwargs):
-        """Save implementation matching base class"""
-        self.model.save_weights(filepath)
-        config = {
-            'input_ts_length': self.input_ts_length,
-            'input_num_features': self.input_num_features,
-            'output_num_features': self.output_num_features,
-            'lstm_hidden_dim': self.lstm_hidden_dim,
-            'lstm_num_layers': self.lstm_num_layers,
-            'dense_layer_size': self.dense_layer_size,
-            'num_dense_layers': self.num_dense_layers,
-            'dropout_rate': self.dropout_rate,
-            'norm_factors': self.norm_factors,
-            'regularizer_config': {
-                'type': self.regularizer.__class__.__name__ if self.regularizer else None,
-                'coefficient': self.regularizer.l2 if hasattr(self.regularizer, 'l2') else (
-                    self.regularizer.l1 if hasattr(self.regularizer, 'l1') else 0)
-            },
-            'optimizer_config': {
-                'learning_rate': self.learning_rate,
-                'beta_1': self.beta_1,
-                'beta_2': self.beta_2,
-                'epsilon': self.epsilon
-            }
-        }
-        np.save(filepath + '_config.npy', config)
-
-    @classmethod
-    def load(cls, 
-            filepath: str, 
-            static_feature_shape: Optional[Tuple] = None,
-            **kwargs):
-        """Load implementation matching base class"""
-        config = np.load(filepath + '_config.npy', allow_pickle=True).item()
-        
-        model = cls(
-            input_ts_length=config['input_ts_length'],
-            input_num_features=config['input_num_features'],
-            output_num_features=config['output_num_features'],
-            lstm_hidden_dim=config['lstm_hidden_dim'],
-            lstm_num_layers=config['lstm_num_layers'],
-            dense_layer_size=config['dense_layer_size'],
-            num_dense_layers=config['num_dense_layers'],
-            dropout=config['dropout_rate'],
-            regularization=config['regularizer_config']['type'],
-            reg_coefficient=config['regularizer_config']['coefficient'],
-            learning_rate=config.get('optimizer_config', {}).get('learning_rate'),
-            beta_1=config.get('optimizer_config', {}).get('beta_1'),
-            beta_2=config.get('optimizer_config', {}).get('beta_2'),
-            epsilon=config.get('optimizer_config', {}).get('epsilon'),
-            norm_factors=config['norm_factors']
-        )
-        
-        dummy_input = tf.zeros((1, config['input_ts_length'], config['input_num_features']))
-        _ = model.model(dummy_input)
-        model.model.load_weights(filepath)
-        return model
+    def predict(self, X, Y, args=None):
+        Y_hat = self.model.predict(X)
+        Y_hat = Normalizer().unnormalize(Y_hat, self.normalization_factors)
+        Y_true= Normalizer().unnormalize(Y, self.normalization_factors)
+        d = haversine_vector(Y_true, Y_hat, Unit.KILOMETERS)
+        return [Y_hat], [d], [d.mean()]
