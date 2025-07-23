@@ -1,191 +1,160 @@
-import mlflow
+
+# This class has been deprecated, and no longer works with all configurations
 from mlflow.tracking.client import MlflowClient
 from mlflow.entities import ViewType
 import pandas as pd
 import numpy as np
 import os
-from typing import Optional, Literal
-import tensorflow as tf
+from config import config
+import urllib
+import keras
+from mlflow import log_metric
 
-class EnhancedMedianStopper(tf.keras.callbacks.Callback):
+class MedianStopper(keras.callbacks.Callback):
     """
-    Advanced Median Stopper with fusion model support featuring:
-    - Model-type aware stopping thresholds
-    - Dual convergence monitoring (main loss + static feature impact)
-    - Dynamic patience adjustment
-    - Enhanced MLflow tracking
-    
-    Args:
-        experiment_id: MLflow experiment ID
-        model_type: Either 'standard' or 'fusion'
-        iterations: Check stopping every N epochs
-        cutoff_file: Alternate path for cutoff storage
-        fusion_config: Optional dictionary with fusion-specific params:
-            - static_feature_weight: Importance of static features (0-1)
-            - min_epochs: Minimum training epochs before checking
-            - patience_factor: Multiplier for standard patience
-    """
+    Based on description in section 3.2.2 of the below paper:
+    https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/46180.pdf
 
-    def __init__(self, 
-                 experiment_id: str,
-                 model_type: Literal['standard', 'fusion'] = 'standard',
-                 iterations: int = 30,
-                 cutoff_file: Optional[str] = None,
-                 fusion_config: Optional[dict] = None):
-        
-        super().__init__()
-        self.cutoffs_path = cutoff_file or os.path.join(
-            config.box_and_year_dir, 
-            '.median_losses.csv'
-        )
-        self.run_id = mlflow.active_run().info.run_id if mlflow.active_run() else None
+    Calculates, for each model that has been fit, at each step, what its average loss was.
+    If for a given step, the current model's best loss is worse than the median average loss, the model
+    is ended early.
+    """
+    def __init__(self, run_id, experiment_id, iterations = 30):
+        self.cutoffs_path = os.path.join(config.box_and_year_dir, '.median_losses.csv')
+        self.run_id = run_id
         self.experiment_id = experiment_id
-        self.model_type = model_type
-        self.early_stopping_occurred = False
+        self.early_stopping_occured = False
         self.stopped_epoch = -1
         self.best_loss = np.Inf
         self.iterations = iterations
-        
-        # Fusion model specific configuration
-        self.fusion_config = fusion_config or {}
-        self._init_model_type_settings()
-        
-        # Tracking buffers
-        self.static_feature_impacts = []
-        self.convergence_history = []
-
-    def _init_model_type_settings(self):
-        """Initialize model-specific parameters"""
-        if self.model_type == 'fusion':
-            self.min_epochs = self.fusion_config.get('min_epochs', 20)
-            self.patience_factor = self.fusion_config.get('patience_factor', 1.5)
-            self.static_feature_weight = self.fusion_config.get('static_feature_weight', 0.3)
-        else:
-            self.min_epochs = 10
-            self.patience_factor = 1.0
-            self.static_feature_weight = 0.0
 
     def on_train_begin(self, logs=None):
-        """Initialize tracking and load historical cutoffs"""
-        try:
-            self._load_cutoffs()
-            if self.model_type == 'fusion':
-                self._load_fusion_baselines()
-        except (FileNotFoundError, pd.errors.EmptyDataError):
-            self.cutoffs = pd.DataFrame(columns=['steps', 'average_loss', 'experiment_id', 'model_type'])
-            if not os.path.exists(os.path.dirname(self.cutoffs_path)):
-                os.makedirs(os.path.dirname(self.cutoffs_path))
+        """
+        Load the median average loss from previous training runs when training begins
 
-    def on_epoch_end(self, epoch, logs=None):
-        """Enhanced epoch monitoring with fusion support"""
-        current_loss = logs.get('val_loss')
-        
-        # Track static feature impact if available
-        if self.model_type == 'fusion' and 'static_feature_loss' in logs:
-            sf_impact = logs['static_feature_loss'] * self.static_feature_weight
-            self.static_feature_impacts.append(sf_impact)
-            mlflow.log_metric('static_feature_impact', sf_impact, step=epoch)
-        
-        if current_loss < self.best_loss:
-            self.best_loss = current_loss
-            self.convergence_history.append(('improvement', epoch))
-        else:
-            self.convergence_history.append(('plateau', epoch))
-        
-        # Skip early checks for model stability
-        if epoch < self.min_epochs:
-            return
-            
-        if ((epoch + 1) % self.iterations) == 0:
-            self._update_cutoff(epoch + 1)
-            if self._should_stop(epoch + 1):
-                self._handle_stopping(epoch)
+        These will be used as the cutoffs for early stopping
 
-    def _handle_stopping(self, epoch):
-        """Execute stopping procedure with enhanced tracking"""
-        self.stopped_epoch = epoch
-        self.model.stop_training = True
-        self.early_stopping_occurred = True
-        
-        mlflow.log_metrics({
-            'early_stopped': 1,
-            'final_epoch': epoch + 1,
-            'best_loss': self.best_loss
-        })
-        
-        if self.model_type == 'fusion':
-            avg_sf_impact = np.mean(self.static_feature_impacts) if self.static_feature_impacts else 0
-            mlflow.log_metric('avg_static_feature_impact', avg_sf_impact)
-
-    def _should_stop(self, current_step: int) -> bool:
-        """Enhanced stopping logic with model-type awareness"""
-        cutoff = self.cutoffs[
-            (self.cutoffs['steps'] == current_step) & 
-            (self.cutoffs['model_type'] == self.model_type)
-        ]['average_loss'].iloc[0]
-        
-        # Apply model-specific thresholds
-        if self.model_type == 'fusion':
-            return self.best_loss > (cutoff * (1 + self.static_feature_weight))
-        return self.best_loss > cutoff
-
-    def _recalculate_cutoffs(self):
-        """Enhanced cutoff calculation with model-type separation"""
-        client = MlflowClient()
-        runs = client.search_runs(
-            experiment_ids=[self.experiment_id],
-            run_view_type=ViewType.ACTIVE_ONLY,
-            filter_string="attributes.status IN ('FINISHED', 'RUNNING')"
-        )
-
-        run_info = []
-        for run in runs:
-            try:
-                metrics = client.get_metric_history(run.info.run_id, 'val_loss')
-                if metrics:
-                    model_type = run.data.tags.get('model_type', 'standard')
-                    df = pd.DataFrame({
-                        'step': [m.step for m in metrics],
-                        'loss': [m.value for m in metrics],
-                        'model_type': model_type
-                    })
-                    df['steps'] = df['step'] + 1
-                    df['average_loss'] = df['loss'].cumsum() / df['steps']
-                    df['experiment_id'] = run.info.experiment_id
-                    run_info.append(df)
-            except Exception as e:
-                print(f"Skipping run {run.info.run_id}: {str(e)}")
-
-        if run_info:
-            all_runs = pd.concat(run_info)
-            self.cutoffs = all_runs.groupby(
-                ['experiment_id', 'steps', 'model_type']
-            ).median().reset_index()
-
-    def _load_fusion_baselines(self):
-        """Load fusion-specific baseline metrics if available"""
-        fusion_cutoffs = self.cutoffs[
-            self.cutoffs['model_type'] == 'fusion'
-        ]
-        if not fusion_cutoffs.empty:
-            self.fusion_baselines = fusion_cutoffs.set_index('steps')['average_loss'].to_dict()
+        :param logs: Information on current run
+        :return: None
+        """
+        self._load_cutoffs()
 
     def on_train_end(self, logs=None):
-        """Finalize training and persist updated cutoffs"""
-        if self.early_stopping_occurred:
-            print(f'\nEarly stopping at epoch {self.stopped_epoch + 1} '
-                  f'(best val_loss: {self.best_loss:.4f})')
-            
-        self._update_cutoff_values()
-        self._log_convergence_pattern()
+        """
+        Record whether early stopping occurred or not in the console and logs
 
-    def _log_convergence_pattern(self):
-        """Analyze and log convergence characteristics"""
-        improvements = sum(1 for t, _ in self.convergence_history if t == 'improvement')
-        plateaus = len(self.convergence_history) - improvements
-        
-        mlflow.log_metrics({
-            'convergence_improvements': improvements,
-            'convergence_plateaus': plateaus,
-            'improvement_ratio': improvements / max(1, len(self.convergence_history))
-        })
+        :param logs: Information on current run
+        :return: None
+        """
+        if self.early_stopping_occured:
+            print(f'Epoch {self.stopped_epoch + 1}: early stopping occurred based on median loss')
+            log_metric('early_median_stopping_occured', 1.)
+        else:
+            print(f'Early stopping did not occur based on median loss')
+            log_metric('early_median_stopping_occured', 0.)
+
+    def on_epoch_end(self, epoch, logs=None):
+        """
+        Log the best loss after each epoch, and if this is an iteration to check for early stopping, do so
+
+        :param epoch: The epoch number
+        :param logs: Information on current run
+        :return: None
+        """
+        current_loss = logs.get('val_loss')
+        if current_loss < self.best_loss:
+            self.best_loss = current_loss
+        if ((epoch + 1) / self.iterations) % 1 == 0:
+            if epoch + 1 in self.cutoffs['steps'].values:
+                cutoff = self.cutoffs[self.cutoffs['steps'] == epoch + 1]['average_loss'].iloc[0]
+            else:
+                cutoff = np.Inf
+            if np.greater(self.best_loss, cutoff):
+                self.stopped_epoch = epoch
+                self.model.stop_training = True
+                self.early_stopping_occured = True
+
+    def _load_cutoffs(self):
+        """
+        Load the median average loss from previous training runs
+
+
+        :return: None
+        """
+        self.cutoffs = pd.read_csv(self.cutoffs_path)
+        self.cutoffs = self.cutoffs[self.cutoffs['experiment_id'] == int(self.experiment_id)]
+
+    def recalculate_cutoffs(self):
+        """
+        After training ends, recalculate the median mean losses across the models
+
+        Writes the medians so they can be easily loaded by the next run
+
+        :return: None
+        """
+        client = MlflowClient()
+        experiments = [exp.experiment_id for exp in client.list_experiments()]
+        runs = client.search_runs(
+            experiment_ids=experiments,
+            run_view_type=ViewType.ACTIVE_ONLY
+        )
+
+        run_info = pd.DataFrame(columns=['steps','average_loss','experiment_id'])
+        for run in runs:
+            if run.info.status == 'FINISHED' or run.info.run_id == self.run_id:
+                artifact_dir = run.info._artifact_uri
+                overall_dir = os.path.dirname(artifact_dir)
+                try:
+                    loss_path = os.path.join(overall_dir, 'metrics', 'epoch_val_loss')
+                    loss_history = pd.read_csv(loss_path,names=['time','loss','step'], sep='\s+')
+                except urllib.error.URLError:
+                    loss_path = os.path.join(overall_dir, 'metrics', 'val_loss')
+                    loss_history = pd.read_csv(loss_path,names=['time','loss','step'], sep='\s+')
+                loss_history['steps'] = 1
+                loss_history = loss_history[['loss','steps']].cumsum()
+                loss_history['average_loss'] = loss_history['loss'] / loss_history['steps']
+
+                loss_history = loss_history.drop(['loss'],axis=1)
+                loss_history['experiment_id'] = run.info.experiment_id
+
+                run_info = pd.concat([run_info, loss_history])
+        self.cutoffs = run_info.groupby(['experiment_id','steps']).median()
+
+        self.cutoffs.to_csv(self.cutoffs_path)
+
+    def on_epoch_begin(self, epoch, logs=None):
+        pass
+
+    def on_test_begin(self, logs=None):
+        pass
+
+    def on_test_end(self, logs=None):
+        pass
+
+    def on_predict_begin(self, logs=None):
+        pass
+
+    def on_predict_end(self, logs=None):
+        pass
+
+    def on_train_batch_begin(self, batch, logs=None):
+        pass
+
+    def on_train_batch_end(self, batch, logs=None):
+        pass
+
+    def on_test_batch_begin(self, batch, logs=None):
+        pass
+
+    def on_test_batch_end(self, batch, logs=None):
+        pass
+
+    def on_predict_batch_begin(self, batch, logs=None):
+        pass
+
+    def on_predict_batch_end(self, batch, logs=None):
+        pass
+
+if __name__ == '__main__':
+    stopper = MedianStopper(run_id=None, experiment_id='6')
+    stopper.recalculate_cutoffs()
