@@ -1,4 +1,3 @@
-
 import argparse
 import logging
 import os
@@ -21,8 +20,8 @@ class SlidingWindow(ProcessingStep):
     def __init__(self):
         super().__init__()
         self._define_directories(
-            from_name='interpolated_with_stride_3' + ('_debug' if args.debug else ''),
-            to_name='windowed_with_stride_3' + ('_debug' if args.debug else '')
+            from_name='interpolated' + ('_debug' if args.debug else ''),
+            to_name='windowed' + ('_debug' if args.debug else '')
         )
         self._initialize_logging(args.save_log, 'sliding_window_with_weather')
 
