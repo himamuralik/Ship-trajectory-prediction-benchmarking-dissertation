@@ -7,6 +7,7 @@
 import sys
 import os
 import time
+from config import config
 import atexit
 import json
 import gc
@@ -16,17 +17,15 @@ os.environ['PYTHONHASHSEED'] = '0'
 import numpy as np
 import pandas as pd
 
-# Adjust imports to work within tests directory
-from .config.config import config
-from .utils.processor_manager import ProcessorManager
-from .utils.test_args_parser import TestArgParser
-from .utils.utils import total_system_ram
+
+from utils import ProcessorManager, TestArgParser
+from utils.utils import total_system_ram
 
 # These need to come before tensorflow is imported so that if we're using CPU we can unregister the GPUs before tf
 # imports them.
 parser = TestArgParser()
 args = parser.parse()
-manager = ProcessorManager(save_dir=config.data_directory, debug=True)
+manager = ProcessorManager(debug=True)
 manager.open()
 
 import mlflow
@@ -34,11 +33,15 @@ import mlflow
 if args.debug:
     mlflow.set_experiment(experiment_name='Ships Debugging')
 
-from .loading.data_loader import DataLoader
-from .utils import utils
+
+from loading.data_loader import DataLoader
+import utils
+
+
 
 if __name__ == '__main__':
     # Parse command line arguments
+
     start_ts = time.time()
 
     utils.set_seed(args.seed)
