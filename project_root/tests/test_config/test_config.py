@@ -1,7 +1,7 @@
 from socket import gethostname
 import os
 
-global test_dataset_config
+global dataset_config
 
 # Define start/end years to look at. Currently, the earliest supported year is 2015. Data prior to 2015 uses a different
 # url and will also need to be preprocessed slightly differently - check the ais_data_faq_from_marine_cadastre.pdf in
