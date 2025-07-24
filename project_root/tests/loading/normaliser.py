@@ -2,8 +2,7 @@ import numpy as np
 
 from loading.disk_array import DiskArray
 from loading.loading import _find_current_col_idx
-from test_config.test_data_config import datasets
-
+from config import config
 
 class Normalizer():
     def __init__(self):
