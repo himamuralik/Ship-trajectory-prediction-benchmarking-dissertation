@@ -5,7 +5,7 @@ from mlflow.entities import ViewType
 import pandas as pd
 import numpy as np
 import os
-from testconfig import config
+from test_config import config
 import urllib
 import keras
 from mlflow import log_metric
