@@ -2,7 +2,7 @@
 from math import pi
 
 import tensorflow as tf
-from config import config
+from test_config import config
 
 
 class HaversineLoss():
