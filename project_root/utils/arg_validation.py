@@ -1,4 +1,3 @@
-
 # Set of classes for validating that command line arguments do not conflict with one another
 #
 # The Req class is used for checking conditional and unconditional requirements. The other classes are the
