@@ -6,7 +6,7 @@ import json                           # ← for dumping JSONs
 import numpy as np
 import kerastuner as kt
 from loading.disk_array import DiskArray
-from data_loader import DataLoader
+from loading.data_loader import DataLoader
 from hypermodel import RNNFusionHyperModel
 
 def compute_sample_size(N, confidence=0.95, margin=0.05, p=0.5):
