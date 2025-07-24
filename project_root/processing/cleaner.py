@@ -64,6 +64,7 @@ class Cleaner(ProcessingStep):
         """
         test_files, train_files = self._get_test_train_files()
         if args.debug:
+            parser.add_argument('-d','--debug', action='store_true', help='Enable debug mode')
             test_files = test_files[:8]
             train_files = train_files[:8]
         logging.debug('Loading test set')
@@ -294,6 +295,7 @@ class Cleaner(ProcessingStep):
             # Read filtered files from temp paths into a single dataframe
             dataset = dd.read_parquet(tmp_files)
             if args.debug:
+                parser.add_argument('-d','--debug', action='store_true', help='Enable debug mode')
                 npartitions = 2
             else:
                 npartitions = os.cpu_count()*6
@@ -307,7 +309,6 @@ class Cleaner(ProcessingStep):
             # Partitions will be split by MMSI, so the below just further sorts them by time
             dataset = dataset.map_partitions(func = (lambda p: p.sort_values(['mmsi','base_datetime'])),
                                              meta = dataset.partitions[0].compute())
-
             # Save sorted df to temp path
             dd.to_parquet(dataset, tmp_dir_2, schema='infer')
             clear_path(tmp_dir)
@@ -449,7 +450,6 @@ class Cleaner(ProcessingStep):
         prev_time_gap = (timestamp - prev_timestamp).dt.total_seconds()
         this_is_start_of_new_track = partition['new_ship'] | pd_append(
             [True, (prev_time_gap > config.new_trajectory_time_gap)])
-
         original_len = len(partition)
         # Filter out messages where ship hasn't moved
         lat_lon = partition[['lat', 'lon']][1:].reset_index(drop=True)
