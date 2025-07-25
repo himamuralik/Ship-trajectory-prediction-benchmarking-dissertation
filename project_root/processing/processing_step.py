@@ -4,8 +4,8 @@ import signal
 
 from abc import ABC
 
-from config import config
-from utils import get_zones_from_coordinates
+import processing.config.config as config
+from processing.utils import get_zones_from_coordinates
 
 
 class ProcessingStep(ABC):
