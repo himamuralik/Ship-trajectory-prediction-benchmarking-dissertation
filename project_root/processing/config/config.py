@@ -70,15 +70,7 @@ categorical_columns = ['vessel_group']
 
 # Dynamic columns (fed to RNN/sequence model)
 global dynamic_columns
-dynamic_columns = [
-    'lat',
-    'lon',
-    'sog',
-    'cog',
-    'year'
-    'day'
-    'month'
-]
+dynamic_columns = ['lat', 'lon', 'sog', 'cog', 'year', 'day', 'month']
 
 # Static columns (fed to fusion/dense input) - for fusion models
 global static_columns
