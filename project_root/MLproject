@@ -6,49 +6,15 @@ entry_points:
     conda_env: processing_environment.yml
     parameters:
       time_gap: float
-      length_of_history: int
-      hours_out: int
-      loss: {type: str, default: mse}
-      time_of_day: {type: str, default: hour_day}
-      weather: {type: str, default: currents}
       dataset_name: str
-      model_type: {type: str, default: long_term_fusion}
-      sog_cog: {type: str, default: raw}
-      rnn_to_dense_connection: {type: str, default: all_nodes}
-      batch_size: int
-      direction: {type: str, default: bidirectional}
-      distance_traveled: {type: str, default: ignore}
-      layer_type: {type: str, default: lstm}
-      learning_rate: float
-      number_of_dense_layers: int
-      number_of_rnn_layers: int
-      rnn_layer_size: int
-      dense_layer_size: int
-      extended_recurrent_idxs: {type: str, default: vt_dst_and_time}
-      number_of_fusion_weather_layers: int
+      model_type: {type: str}
+      hours_out: int
     command: >
       python tests/create_data.py
-        --time_gap {time_gap}
-        --length_of_history {length_of_history}
-        --hours_out {hours_out}
-        --loss {loss}
-        --time_of_day {time_of_day}
-        --weather {weather}
-        --dataset_name {dataset_name}
+        {time_gap}
+        {dataset_name}
         --model_type {model_type}
-        --sog_cog {sog_cog}
-        --rnn_to_dense_connection {rnn_to_dense_connection}
-        --batch_size {batch_size}
-        --direction {direction}
-        --distance_traveled {distance_traveled}
-        --layer_type {layer_type}
-        --learning_rate {learning_rate}
-        --number_of_dense_layers {number_of_dense_layers}
-        --number_of_rnn_layers {number_of_rnn_layers}
-        --rnn_layer_size {rnn_layer_size}
-        --dense_layer_size {dense_layer_size}
-        --extended_recurrent_idxs {extended_recurrent_idxs}
-        --number_of_fusion_weather_layers {number_of_fusion_weather_layers}
+        --hours_out {hours_out}
 
   test_time_gaps:
     conda_env: model_fitting_environment.yml
@@ -97,3 +63,4 @@ entry_points:
         --dense_layer_size {dense_layer_size}
         --extended_recurrent_idxs {extended_recurrent_idxs}
         --number_of_fusion_weather_layers {number_of_fusion_weather_layers}
+
