@@ -2,8 +2,8 @@ import argparse
 import os
 import numpy as np
 
-from config import config
-from config.dataset_config import datasets
+import tests.test_config.config as config
+from tests.test_config.dataset_config import datasets
 from utils.arg_validation import Given, Values, Req
 
 
