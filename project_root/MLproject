@@ -9,12 +9,8 @@ entry_points:
       dataset_name: str
       model_type: {type: str}
       hours_out: int
-    command: >
-      python tests/create_data.py
-        {time_gap}
-        {dataset_name}
-        --model_type {model_type}
-        --hours_out {hours_out}
+    command: >-
+     python -m tests.create_data.py {time_gap} {dataset_name} --model_type {model_type} --hours_out {hours_out}
 
   test_time_gaps:
     conda_env: model_fitting_environment.yml
@@ -40,27 +36,5 @@ entry_points:
       dense_layer_size: int
       extended_recurrent_idxs: {type: str, default: vt_dst_and_time}
       number_of_fusion_weather_layers: int
-    command: >
-      python tests/fit_and_evaluate_model.py
-        --time_gap {time_gap}
-        --length_of_history {length_of_history}
-        --hours_out {hours_out}
-        --loss {loss}
-        --time_of_day {time_of_day}
-        --weather {weather}
-        --dataset_name {dataset_name}
-        --model_type {model_type}
-        --sog_cog {sog_cog}
-        --rnn_to_dense_connection {rnn_to_dense_connection}
-        --batch_size {batch_size}
-        --direction {direction}
-        --distance_traveled {distance_traveled}
-        --layer_type {layer_type}
-        --learning_rate {learning_rate}
-        --number_of_dense_layers {number_of_dense_layers}
-        --number_of_rnn_layers {number_of_rnn_layers}
-        --rnn_layer_size {rnn_layer_size}
-        --dense_layer_size {dense_layer_size}
-        --extended_recurrent_idxs {extended_recurrent_idxs}
-        --number_of_fusion_weather_layers {number_of_fusion_weather_layers}
-
+    command: >-
+       python -m tests.fit_and_evaluate_model.py --time_gap {time_gap} --length_of_history {length_of_history} --hours_out {hours_out} --loss {loss} --time_of_day {time_of_day} --weather {weather} --dataset_name {dataset_name} --model_type {model_type} --sog_cog {sog_cog} --rnn_to_dense_connection {rnn_to_dense_connection} --batch_size {batch_size} --direction {direction} --distance_traveled {distance_traveled} --layer_type {layer_type} --learning_rate {learning_rate} --number_of_dense_layers {number_of_dense_layers} --number_of_rnn_layers {number_of_rnn_layers} --rnn_layer_size {rnn_layer_size} --dense_layer_size {dense_layer_size} --extended_recurrent_idxs {extended_recurrent_idxs} --number_of_fusion_w
