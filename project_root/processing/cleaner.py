@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 from haversine import haversine_vector, Unit
 
-from processing.config.config import config
-from config.dataset_config import datasets
+import processing.config.config as config
+from  processing.config.dataset_config import datasets
 from processing_step import ProcessingStep
 from utils import get_info_from_specifier, pd_append, to_snake_case, clear_path, all_specifiers, get_min_max_times
 
