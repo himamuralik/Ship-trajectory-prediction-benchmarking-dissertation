@@ -7,10 +7,10 @@ import dask.dataframe as dd
 import numpy as np
 import pandas as pd
 
-from config import config
-from config.dataset_config import datasets
+import processing.config.config as config
+from processing.config.dataset_config import datasets
 from processing_step import ProcessingStep
-from utils import clear_path
+from processing.utils import clear_path
 
 class SlidingWindow(ProcessingStep):
     """
