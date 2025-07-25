@@ -3,9 +3,9 @@
 import json
 import numpy as np
 from loading.disk_array import DiskArray
-from data_loader    import DataLoader
-from hypermodel     import RNNFusionHyperModel
-import kerastuner    as kt
+from loading.data_loader import DataLoader
+from hypermodel import RNNFusionHyperModel
+import kerastuner as kt
 
 def load_best_hp(model_type, output_dir):
     with open(f"{output_dir}/best_{model_type}.json") as f:
