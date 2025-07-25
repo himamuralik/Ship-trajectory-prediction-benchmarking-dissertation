@@ -7,7 +7,7 @@
 import sys
 import os
 import time
-from test_config import config
+import tests.test_config.config as config
 import atexit
 import json
 import gc
