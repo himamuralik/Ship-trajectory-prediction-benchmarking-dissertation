@@ -10,10 +10,9 @@ import urllib3
 import pandas as pd
 
 from processing.config.dataset_config import datasets
-from config import config
+import processing.config.config as config
 from processing_step import ProcessingStep
-from utils import all_specifiers
-
+from processing.utils import all_specifiers
 
 class Downloader(ProcessingStep):
     """
