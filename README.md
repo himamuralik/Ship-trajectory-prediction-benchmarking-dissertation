@@ -44,11 +44,49 @@ The raw AIS data (MMSI, Latitude, Longitude, SOG, COG) contained noise and irreg
 #### 2. The Model (BiLSTM-Attention)
 The core innovation is the **Attention Layer**, which allows the model to "focus" on specific past time steps (e.g., the start of a turn) rather than treating all history equally.
 
-```python
-# Code Snippet: Custom Attention Mechanism
+'''python
+
+Code Snippet: Custom Attention Mechanism
 def attention_3d_block(inputs):
+    # inputs.shape = (batch_size, time_steps, input_dim)
+    input_dim = int(inputs.shape[2])
+    
+    # Permute dimensions to apply dense layer to the time axis
     a = Permute((2, 1))(inputs)
     a = Dense(inputs.shape[1], activation='softmax')(a)
-    a_probs = Permute((2, 1))(a)
+    
+    # Re-permute to original orientation
+    a_probs = Permute((2, 1), name='attention_vec')(a)
+    
+    # Multiply weights with original inputs
     output_attention_mul = Multiply()([inputs, a_probs])
     return output_attention_mul
+🚀 Usage Instructions
+Clone the repository:
+
+Bash
+
+git clone https://github.com/himamuralik/Ship-trajectory-prediction-benchmarking-dissertation.git
+cd Ship-trajectory-prediction-benchmarking-dissertation
+Install dependencies:
+
+Bash
+
+pip install -r requirements.txt
+Run the Notebook: Open ship_trajectory_prediction_final_code.ipynb in Jupyter Notebook or VS Code to run the training pipeline and view the interactive Folium maps.
+
+📈 Visual Results
+(Run the notebook to generate these interactive maps)
+
+Blue Line: Actual Ship Path (Ground Truth)
+
+Red Line: Predicted Trajectory (BiLSTM-Attention)
+
+Green Markers: Start/End Points
+
+👨‍💻 Author
+Hima Murali Kattur
+
+LinkedIn
+
+GitHub
