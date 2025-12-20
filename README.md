@@ -62,6 +62,7 @@ def attention_3d_block(inputs):
     # Multiply weights with original inputs
     output_attention_mul = Multiply()([inputs, a_probs])
     return output_attention_mul
+```
 🚀 Usage Instructions
 Clone the repository:
 
