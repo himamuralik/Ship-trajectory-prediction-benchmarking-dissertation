@@ -27,7 +27,8 @@ Demonstrates feasibility of deep learning for real-time collision avoidance and 
 The repository is structured as a compliant **MLflow Project**, separating exploration from engineering.
 
 *(If the diagram below does not render, view this file on the GitHub desktop website.)*
-```mermaidgraph LR
+```mermaid
+graph LR
 A[Raw AIS Data] --> B(Ingestion Module)
 B --> C{Data Cleaning}
 C -->|Invalid MMSI| D[Discard]
