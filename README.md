@@ -39,8 +39,8 @@ graph LR
     G --> I[Evaluation Artifacts]
 ```
 📂 File Structure
-Plaintext
-
+## 📂 File Structure
+```text
 Ship-trajectory-prediction-benchmarking-dissertation
 │
 ├── ship_trajectory_prediction_final_code.ipynb
@@ -65,6 +65,9 @@ Ship-trajectory-prediction-benchmarking-dissertation
 │       └── fit_and_evaluate_model.py  # MLflow-tracked training
 │
 └── requirements.txt
+```
+
+---
 ⚙️ Data Pipeline (ETL)
 The system processes raw AIS streams through a robust engineering pipeline:
 
