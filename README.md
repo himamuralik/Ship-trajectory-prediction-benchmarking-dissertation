@@ -12,13 +12,12 @@
 ## ⚡ Key Engineering Outcomes
 
 | Metric | Result | Operational Relevance |
-|:-------|:-------|:----------------------|
-| **Mean Haversine Error** | **0.09 km** | High-fidelity tracking of maneuvering vessels in New York Harbor |
-| **Inference Latency** | **< 10ms** | Optimized GRU inference suitable for near real-time edge evaluation |
-| **Pipeline Efficiency** | **85% Gain** | Modular ETL scripts reduced data preparation from 6hrs to 45mins |
+| :--- | :--- | :--- |
+| **Mean Haversine Error** | **0.09 km** | High-fidelity tracking of maneuvering vessels in New York Harbor. |
+| **Inference Latency** | **< 10ms** | Optimized GRU inference suitable for near real-time edge evaluation. |
+| **Pipeline Efficiency** | **85% Gain** | Modular ETL scripts reduced data preparation from 6hrs to 45mins. |
 
-**Real-World Impact:**  
-These results demonstrate the feasibility of using deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
+**Real-World Impact:** These results demonstrate the feasibility of using deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
 
 ---
 
@@ -27,6 +26,7 @@ These results demonstrate the feasibility of using deep learning for real-time c
 The repository is structured as a compliant **MLflow Project**, separating exploration from engineering.
 
 *(Note: If the diagram below does not render, please view this file on the GitHub desktop website.)*
+
 ```mermaid
 graph LR
     A[Raw AIS Data] --> B(Ingestion Module)
@@ -38,12 +38,7 @@ graph LR
     F --> H[GRU / Baselines]
     G --> I[Evaluation Artifacts]
 ```
-
----
-
-## 📂 File Structure
-```text
-Ship-trajectory-prediction-benchmarking-dissertation
+📂 File StructurePlaintextShip-trajectory-prediction-benchmarking-dissertation
 │
 ├── ship_trajectory_prediction_final_code.ipynb
 │   └── Interactive visualizations & deep learning analysis
@@ -63,121 +58,19 @@ Ship-trajectory-prediction-benchmarking-dissertation
 │   │   └── create_test_data.sh
 │   │
 │   └── tests/
-│       ├── create_data.py       # MLflow-tracked data generation
-│       └── fit_and_evaluate_model.py  # MLflow-tracked training
+│       ├── create_data.py
+│       └── fit_and_evaluate_model.py
 │
 └── requirements.txt
-```
-
----
-
-## ⚙️ Data Pipeline (ETL)
-
-The system processes raw AIS streams through a robust engineering pipeline:
-
-- **Ingestion:** 2GB+ CSV dumps from US Coast Guard NAIS (New York Harbor, 15M+ records)
-- **Sanitization:** Removal of invalid MMSIs and stationary vessels (SOG < 0.5 knots)
-- **Regularization:** Linear interpolation to fix irregular AIS broadcast rates
-- **Sequencing:** Sliding window generation ($X_t$ = 10 minutes) for forecasting
-
----
-
-## 📋 Prerequisites
-
-**Required:**
-- Python 3.9+
-- Conda
-- MLflow 2.x
-- 16GB RAM minimum
-- ~10GB disk space
-
-**Optional:**
-- CUDA-enabled GPU (faster training)
-- Docker (containerized deployment)
-
-**Tested Environments:**
-- Ubuntu 20.04 LTS
-- macOS 12+
-- Windows 10 (WSL2)
-
----
-
-## 🚀 How to Run
-
-### Mode 1: Visual Analysis (Deep Learning Results)
-```bash
-pip install -r requirements.txt
+⚙️ Data Pipeline (ETL)The system processes raw AIS streams through a robust engineering pipeline:Ingestion: 2GB+ CSV dumps from US Coast Guard NAIS (New York Harbor, 15M+ records).Sanitization: Removal of invalid MMSIs and stationary vessels (SOG < 0.5 knots).Regularization: Linear interpolation to fix irregular AIS broadcast rates.Sequencing: Sliding window generation ($X_t$ = 10 minutes) for forecasting.📋 PrerequisitesRequiredPython 3.9+Conda (Environment isolation)MLflow 2.x16GB RAM minimum~10GB disk spaceOptionalCUDA-enabled GPU (faster training)Docker (containerized deployment)Tested EnvironmentsUbuntu 20.04 LTSmacOS 12+Windows 10 (WSL2)🚀 How to RunMode 1: Visual Analysis (Deep Learning Results)To view the BiLSTM-Attention model results and interactive maps immediately:Bashpip install -r requirements.txt
 jupyter notebook ship_trajectory_prediction_final_code.ipynb
-```
-
-### Mode 2: Reproducible MLOps Pipeline
-
-#### 1. Environment Setup
-```bash
-conda env create -f project_root/processing_environment.yml
-```
-
-#### 2. Verify Setup
-```bash
-mlflow --version
+Mode 2: Reproducible MLOps Pipeline1. Environment SetupBashconda env create -f project_root/processing_environment.yml
+2. Verify SetupBashmlflow --version
 python -c "import mlflow; print('MLflow ready')"
 cd project_root/processing && chmod +x process.sh
-```
-
-#### 3. Execute Pipeline
-```bash
-bash process.sh
+3. Execute PipelineBashbash process.sh
 cd ../experiment_scripts
 bash run_test_models.sh
-```
-
-#### 4. View Experiments
-```bash
-mlflow ui
-```
-Navigate to: `http://localhost:5000`
-
----
-
-## 🔬 Models Benchmarked
-
-| Model | Mean Error | Speed | Best For |
-|-------|-----------|-------|----------|
-| **BiLSTM-Attention** | **0.09 km** | 12ms | Complex maneuvers |
-| **GRU** | 0.12 km | **8ms** | Low-latency / edge |
-| **Linear Regression** | 0.45 km | 2ms | Baseline reference |
-
----
-
-## 📜 Citation
-```
-Murali, H. (2024).
-Benchmarking BiLSTM-Attention vs GRU for Maritime Trajectory Prediction.
-MSc Dissertation, University of Plymouth, UK.
-```
-
----
-
-## 👤 Author
-
-**Hima Murali**  
-MSc Artficial Intelligence — University of Plymouth  
-B.Tech Computer Science Engineering
-
-**Research Focus:** Maritime Autonomy, MLOps, Signal Processing
-
-[LinkedIn](your-linkedin-url) | [GitHub](your-github-url)
-
----
-
-## 🙏 Acknowledgments
-
-- University of Plymouth for computational resources
-- US Coast Guard NAIS for AIS data access
-- [Supervisor name] for research guidance
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
+4. View ExperimentsBashmlflow ui
+# Navigate to: http://localhost:5000
+🔬 Models BenchmarkedModelMean ErrorSpeedBest ForBiLSTM-Attention0.09 km12msComplex maneuversGRU0.12 km8msLow-latency / edgeLinear Regression0.45 km2msBaseline reference📜 CitationMurali, H. (2025). Benchmarking BiLSTM-Attention vs GRU for Maritime Trajectory Prediction. MSc Dissertation, University of Plymouth.👤 AuthorHima Murali KatturMSc Artificial Intelligence | B.Tech Computer ScienceFocus: Maritime Autonomy, MLOps, Signal ProcessingLinkedIn | GitHub
