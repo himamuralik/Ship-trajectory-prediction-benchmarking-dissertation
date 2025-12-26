@@ -152,7 +152,6 @@ B.Tech Electronics & Communication Engineering
 
 - University of Plymouth for computational resources
 - US Coast Guard NAIS for AIS data access
-- [Supervisor name] for research guidance
 
 ---
 
