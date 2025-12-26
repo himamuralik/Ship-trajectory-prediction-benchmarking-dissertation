@@ -41,7 +41,8 @@ G --> I[Evaluation Artifacts]
 ---
 
 ## 📂 File Structure
-```textShip-trajectory-prediction-benchmarking-dissertation
+```text
+Ship-trajectory-prediction-benchmarking-dissertation
 │
 ├── ship_trajectory_prediction_final_code.ipynb
 │   └── Interactive visualizations & deep learning analysis
