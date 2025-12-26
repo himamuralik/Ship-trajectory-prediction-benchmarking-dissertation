@@ -101,9 +101,9 @@ Ship-trajectory-prediction-benchmarking-dissertation
 ## 🚀 How to Run
 
 ### Mode 1: Visual Analysis
-```bashpip install -r requirements.txt
+```bash
+pip install -r requirements.txt
 jupyter notebook ship_trajectory_prediction_final_code.ipynb
-
 ### Mode 2: Reproducible MLOps Pipeline
 ```bashSetup environment
 conda env create -f project_root/processing_environment.ymlVerify setup
@@ -117,7 +117,7 @@ bash run_test_models.shView results
 mlflow ui
 
 Navigate to: `http://localhost:5000`
-
+```
 ---
 
 ## 🔬 Models Benchmarked
