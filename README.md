@@ -39,9 +39,8 @@ graph LR
     F --> H[GRU / Baselines]
     G --> I[Evaluation Artifacts]
 ```
-📂 File Structure
-text
-Copy code
+## 📂 File Structure
+```text
 Ship-trajectory-prediction-benchmarking-dissertation
 │
 ├── ship_trajectory_prediction_final_code.ipynb
@@ -62,10 +61,13 @@ Ship-trajectory-prediction-benchmarking-dissertation
 │   │   └── create_test_data.sh
 │   │
 │   └── tests/
-│       ├── create_data.py
-│       └── fit_and_evaluate_model.py
+│       ├── create_data.py       # MLflow-tracked data generation
+│       └── fit_and_evaluate_model.py  # MLflow-tracked training
 │
 └── requirements.txt
+```
+
+---
 ⚙️ Data Pipeline (ETL)
 Ingestion: 2GB+ CSV dumps from US Coast Guard NAIS (New York Harbor, 15M+ records)
 
