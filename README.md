@@ -41,6 +41,7 @@ graph LR
 ```
 📂 File Structure
 text
+Copy code
 Ship-trajectory-prediction-benchmarking-dissertation
 │
 ├── ship_trajectory_prediction_final_code.ipynb
@@ -66,8 +67,6 @@ Ship-trajectory-prediction-benchmarking-dissertation
 │
 └── requirements.txt
 ⚙️ Data Pipeline (ETL)
-The system processes raw AIS streams through a robust engineering pipeline:
-
 Ingestion: 2GB+ CSV dumps from US Coast Guard NAIS (New York Harbor, 15M+ records)
 
 Sanitization: Removal of invalid MMSIs and stationary vessels (SOG < 0.5 knots)
@@ -149,3 +148,6 @@ MSc Artificial Intelligence | B.Tech Computer Science
 Focus: Maritime Autonomy, MLOps, Signal Processing
 
 LinkedIn | GitHub
+
+yaml
+Copy code
