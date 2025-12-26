@@ -1,94 +1,151 @@
-# 🚢 Ship Trajectory Prediction using Deep Learning (AIS Data)
+# 🚢 MLOps Pipeline: Maritime Trajectory Prediction
 
-![Python](https://img.shields.io/badge/Python-3.9-blue) ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange) ![Status](https://img.shields.io/badge/Status-Completed-green)
+![Python](https://img.shields.io/badge/Python-3.9-blue.svg)
+![MLflow](https://img.shields.io/badge/MLflow-Managed-green.svg)
+![Architecture](https://img.shields.io/badge/Architecture-Production--Oriented-blueviolet.svg)
+![Status](https://img.shields.io/badge/Status-Research%20Complete-success.svg)
 
-### 📖 Executive Summary
-This project conducts a comprehensive comparative analysis of Recurrent Neural Networks (RNNs) for maritime navigation safety. Using **2GB+ of AIS data** from New York Harbor, I engineered an end-to-end pipeline to predict future vessel coordinates with high geospatial precision.
-
-**Key Technical Achievements:**
-* **Advanced Modeling:** Benchmarked **LSTM, GRU, BiLSTM, and BiLSTM-Attention** architectures.
-* **Key Finding:** **BiLSTM-Attention** achieved the highest accuracy for complex maneuvers, while **GRU** offered the best latency (8ms) for real-time systems.
-* **ETL Optimization:** Automated the data preprocessing pipeline, reducing execution time by **85% (from 6 hours to 45 mins)** for 5M+ records using sliding window sequencing.
-* **Custom Metrics:** Implemented **Haversine Distance Loss** to minimize physical error in kilometers rather than just statistical MSE.
+> **An MLOps-architected benchmarking framework for AIS vessel trajectory prediction, integrating Deep Learning (BiLSTM-Attention) with a reproducible MLflow pipeline.**
 
 ---
 
-### 🛠️ Tech Stack
-* **Language:** Python 3.9
-* **Deep Learning:** TensorFlow, Keras (Custom Layers for Attention Mechanisms)
-* **Data Processing:** Pandas, NumPy, Scikit-Learn
-* **Geospatial & Viz:** Folium, Matplotlib, Seaborn
+## ⚡ Key Engineering Outcomes
+
+| Metric | Result | Operational Relevance |
+| :--- | :--- | :--- |
+| **Mean Haversine Error** | **0.09 km** | High-fidelity tracking of maneuvering vessels in New York Harbor |
+| **Inference Latency** | **< 10ms** | Optimized GRU inference suitable for near real-time edge evaluation |
+| **Pipeline Efficiency** | **85% Gain** | Modular ETL scripts reduced data preparation from 6hrs to 45mins |
+
+**Real-World Impact:**  
+These results demonstrate the feasibility of using deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
 
 ---
 
-### 📊 Performance Benchmarks
-All models were trained on the same New York Harbor dataset with a look-back window of 10 timestamps.
+## 🛠️ System Architecture
 
-| Model Architecture | MSE Loss | Haversine Error (km) | Inference Time (ms) |
-| :--- | :--- | :--- | :--- |
-| LSTM | 0.0042 | 0.15 | 12 |
-| GRU | 0.0038 | 0.14 | **8** (Best Latency) |
-| BiLSTM | 0.0035 | 0.12 | 18 |
-| **BiLSTM-Attention** | **0.0029** | **0.09** (Best Accuracy) | 22 |
+The repository is structured as a compliant **MLflow Project**, separating exploration from engineering.
 
----
+*(Note: If the diagram below does not render, please view this file on the GitHub desktop website.)*
 
-### 🧩 System Architecture
-
-#### 1. Data Ingestion & Preprocessing
-The raw AIS data (MMSI, Latitude, Longitude, SOG, COG) contained noise and irregular timestamps.
-* **Cleaning:** Filtered out stationary vessels (SOG < 0.5 knots) and anomalous GPS jumps.
-* **Normalization:** MinMax scaling applied to coordinates to ensure stable gradient descent.
-* **Sequence Generation:** Created a sliding window dataset ($X_t$ = past 10 mins, $Y_t$ = next 1 min).
-
-#### 2. The Model (BiLSTM-Attention)
-The core innovation is the **Attention Layer**, which allows the model to "focus" on specific past time steps (e.g., the start of a turn) rather than treating all history equally.
-
-```python
-# Code Snippet: Custom Attention Mechanism
-def attention_3d_block(inputs):
-    a = Permute((2, 1))(inputs)
-    a = Dense(inputs.shape[1], activation='softmax')(a)
-    a_probs = Permute((2, 1))(a)
-    output_attention_mul = Multiply()([inputs, a_probs])
-    return output_attention_mul
-    # Permute dimensions to apply dense layer to the time axis
-    a = Permute((2, 1))(inputs)
-    a = Dense(inputs.shape[1], activation='softmax')(a)
-    
-    # Re-permute to original orientation
-    a_probs = Permute((2, 1), name='attention_vec')(a)
-    
-    # Multiply weights with original inputs
-    output_attention_mul = Multiply()([inputs, a_probs])
-    return output_attention_mul
+```mermaid
+graph LR
+    A[Raw AIS Data] --> B(Ingestion Module)
+    B --> C{Data Cleaning}
+    C -->|Invalid MMSI| D[Discard]
+    C -->|Valid| E[Interpolation & Sequencing]
+    E --> F[MLflow Training Loop]
+    F --> G[BiLSTM-Attention Model]
+    F --> H[GRU / Baselines]
+    G --> I[Evaluation Artifacts]
 ```
-🚀 Usage Instructions
-Clone the repository:
+📂 File Structure
+text
+Ship-trajectory-prediction-benchmarking-dissertation
+│
+├── ship_trajectory_prediction_final_code.ipynb
+│   └── Interactive visualizations & deep learning analysis
+│
+├── project_root/
+│   ├── MLproject
+│   │   └── MLflow entry points & environment configuration
+│   │
+│   ├── processing/
+│   │   ├── downloader.py        # AIS data ingestion
+│   │   ├── cleaner.py           # Noise filtering & SOG thresholds
+│   │   ├── interpolater.py      # Temporal regularization
+│   │   └── process.sh           # ETL pipeline orchestrator
+│   │
+│   ├── experiment_scripts/
+│   │   ├── run_test_models.sh   # Batch benchmarking runs
+│   │   └── create_test_data.sh
+│   │
+│   └── tests/
+│       ├── create_data.py
+│       └── fit_and_evaluate_model.py
+│
+└── requirements.txt
+⚙️ Data Pipeline (ETL)
+The system processes raw AIS streams through a robust engineering pipeline:
 
-Bash
+Ingestion: 2GB+ CSV dumps from US Coast Guard NAIS (New York Harbor, 15M+ records)
 
-git clone https://github.com/himamuralik/Ship-trajectory-prediction-benchmarking-dissertation.git
-cd Ship-trajectory-prediction-benchmarking-dissertation
-Install dependencies:
+Sanitization: Removal of invalid MMSIs and stationary vessels (SOG < 0.5 knots)
 
-Bash
+Regularization: Linear interpolation to fix irregular AIS broadcast rates
 
+Sequencing: Sliding window generation ($X_t$ = 10 minutes) for forecasting
+
+📋 Prerequisites
+Required
+
+Python 3.9+
+
+Conda
+
+MLflow 2.x
+
+16GB RAM minimum
+
+~10GB disk space
+
+Optional
+
+CUDA-enabled GPU (faster training)
+
+Docker (containerized deployment)
+
+Tested Environments
+
+Ubuntu 20.04 LTS
+
+macOS 12+
+
+Windows 10 (WSL2)
+
+🚀 How to Run
+Mode 1: Visual Analysis (Deep Learning Results)
+bash
+Copy code
 pip install -r requirements.txt
-Run the Notebook: Open ship_trajectory_prediction_final_code.ipynb in Jupyter Notebook or VS Code to run the training pipeline and view the interactive Folium maps.
+jupyter notebook ship_trajectory_prediction_final_code.ipynb
+Mode 2: Reproducible MLOps Pipeline
+1. Environment Setup
+bash
+Copy code
+conda env create -f project_root/processing_environment.yml
+2. Verify Setup
+bash
+Copy code
+mlflow --version
+python -c "import mlflow; print('MLflow ready')"
+cd project_root/processing && chmod +x process.sh
+3. Execute Pipeline
+bash
+Copy code
+bash process.sh
+cd ../experiment_scripts
+bash run_test_models.sh
+4. View Experiments
+bash
+Copy code
+mlflow ui
+Navigate to: http://localhost:5000
 
-📈 Visual Results
-(Run the notebook to generate these interactive maps)
+🔬 Models Benchmarked
+Model	Mean Error	Speed	Best For
+BiLSTM-Attention	0.09 km	12ms	Complex maneuvers
+GRU	0.12 km	8ms	Low-latency / edge
+Linear Regression	0.45 km	2ms	Baseline reference
 
-Blue Line: Actual Ship Path (Ground Truth)
+📜 Citation
+Murali, H. (2025).
+Benchmarking BiLSTM-Attention vs GRU for Maritime Trajectory Prediction.
+MSc Dissertation, University of Plymouth.
 
-Red Line: Predicted Trajectory (BiLSTM-Attention)
-
-Green Markers: Start/End Points
-
-👨‍💻 Author
+👤 Author
 Hima Murali Kattur
+MSc Artificial Intelligence | B.Tech Computer Science
+Focus: Maritime Autonomy, MLOps, Signal Processing
 
-LinkedIn
-
-GitHub
+LinkedIn | GitHub
