@@ -130,10 +130,6 @@ Navigate to: `http://localhost:5000`
 
 ---
 
-## 📜 CitationMurali, H. (2024).
-Benchmarking BiLSTM-Attention vs GRU for Maritime Trajectory Prediction.
-MSc Dissertation, University of Plymouth, UK.
-
 ---
 
 ## 👤 Author
