@@ -100,23 +100,33 @@ Ship-trajectory-prediction-benchmarking-dissertation
 
 ## 🚀 How to Run
 
+
 ### Mode 1: Visual Analysis
 ```bash
 pip install -r requirements.txt
 jupyter notebook ship_trajectory_prediction_final_code.ipynb
+```
 ### Mode 2: Reproducible MLOps Pipeline
 ```bashSetup environment
-conda env create -f project_root/processing_environment.ymlVerify setup
+# Setup environment
+conda env create -f project_root/processing_environment.yml
+
+# Verify setup
 mlflow --version
-python -c "import mlflow; print('MLflow ready')"Run data processing
+python -c "import mlflow; print('MLflow ready')"
+
+# Run data processing
 cd project_root/processing
 chmod +x process.sh
-bash process.shRun benchmarking
-cd ../experiment_scripts
-bash run_test_models.shView results
-mlflow ui
+bash process.sh
 
-Navigate to: `http://localhost:5000`
+# Run benchmarking
+cd ../experiment_scripts
+bash run_test_models.sh
+
+# View results
+mlflow ui
+# Navigate to: http://localhost:5000
 ```
 ---
 
