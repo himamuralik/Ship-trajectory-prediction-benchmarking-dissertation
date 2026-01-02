@@ -127,6 +127,7 @@ Navigate to: `http://localhost:5000`
 | **BiLSTM-Attention** | **0.09 km** | 10ms | Complex maneuvers |
 | **GRU** | 0.12 km | **8ms** | Low-latency / edge |
 | **Linear Regression** | 0.45 km | 2ms | Baseline reference |
+Note: Inference speeds measured on CPU (Intel i7) to simulate edge gateway performance.
 
 ---
 
