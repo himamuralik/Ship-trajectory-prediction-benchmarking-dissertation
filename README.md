@@ -107,7 +107,7 @@ pip install -r requirements.txt
 jupyter notebook ship_trajectory_prediction_final_code.ipynb
 ```
 ### Mode 2: Reproducible MLOps Pipeline
-```bashSetup environment
+```bashSetup 
 # Setup environment
 conda env create -f project_root/processing_environment.yml
 
