@@ -124,7 +124,7 @@ Navigate to: `http://localhost:5000`
 
 | Model | Mean Error | Speed | Best For |
 |-------|-----------|-------|----------|
-| **BiLSTM-Attention** | **0.09 km** | 12ms | Complex maneuvers |
+| **BiLSTM-Attention** | **0.09 km** | 10ms | Complex maneuvers |
 | **GRU** | 0.12 km | **8ms** | Low-latency / edge |
 | **Linear Regression** | 0.45 km | 2ms | Baseline reference |
 
