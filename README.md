@@ -135,8 +135,8 @@ Navigate to: `http://localhost:5000`
 ## 👤 Author
 
 **Hima Murali**  
-MSc Data Science & Business Analytics — University of Plymouth  
-B.Tech Electronics & Communication Engineering
+MSc Artificial Intelligence — University of Plymouth  
+B.Tech Computer science
 
 **Research Focus:** Maritime Autonomy, MLOps, Signal Processing
 
