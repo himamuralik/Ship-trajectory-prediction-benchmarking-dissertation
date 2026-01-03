@@ -9,13 +9,17 @@
 
 ---
 
+
 ## ⚡ Key Engineering Outcomes
 
 | Metric | Result | Operational Relevance |
 |:-------|:-------|:----------------------|
-| **Mean Haversine Error** | **0.09 km** | High-fidelity tracking of maneuvering vessels in New York Harbor |
-| **Inference Latency** | **< 10ms** | Optimized GRU inference suitable for near real-time edge evaluation |
+| **Trajectory Accuracy** | **4.06 km (ADE)** | Reliable 3-hour forecasting within standard maritime safety buffers |
+| **Mean Step Error** | **~0.10 km** | High-precision tracking between 10-minute signal updates |
+| **Inference Latency** | **< 10ms** | Optimized inference suitable for near real-time edge evaluation |
 | **Pipeline Efficiency** | **85% Gain** | Modular ETL scripts reduced data preparation from 6hrs to 45mins |
+
+**Real-World Impact:** Demonstrates feasibility of deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
 
 **Real-World Impact:**  
 Demonstrates feasibility of deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
@@ -132,11 +136,11 @@ mlflow ui
 
 ## 🔬 Models Benchmarked
 
-| Model | Mean Error | Speed | Best For |
-|-------|-----------|-------|----------|
-| **BiLSTM-Attention** | **0.09 km** | 10ms | Complex maneuvers |
-| **GRU** | 0.12 km | **8ms** | Low-latency / edge |
-| **Linear Regression** | 0.45 km | 2ms | Baseline reference |
+| Model | Trajectory ADE (3hr) | Speed | Best For |
+|-------|----------------------|-------|----------|
+| **BiLSTM-Attention** | **4.06 km** | ~10ms | Complex maneuvers |
+| **GRU** | 4.12 km | **~8ms** | Low-latency / edge |
+| **Linear Regression** | > 8.00 km | 2ms | Baseline reference |
 Note: Inference speeds measured on CPU (Intel i7) to simulate edge gateway performance.
 
 ---
