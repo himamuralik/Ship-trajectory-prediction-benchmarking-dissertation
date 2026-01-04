@@ -1,4 +1,4 @@
-#Benchmarking Deep Learning for Ship Trajectory Prediction
+# 🚢 Maritime Trajectory Prediction: MLOps Benchmarking Framework
 
 ![Python](https://img.shields.io/badge/Python-3.7-blue.svg)
 ![MLflow](https://img.shields.io/badge/MLflow-Managed-green.svg)
