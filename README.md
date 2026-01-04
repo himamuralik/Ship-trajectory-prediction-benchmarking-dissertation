@@ -1,11 +1,11 @@
-# 🚢 Maritime Trajectory Prediction: MLOps Benchmarking Framework
+# 🚢 Maritime Trajectory Prediction: Benchmarking Suite
 
-![Python](https://img.shields.io/badge/Python-3.7-blue.svg)
-![MLflow](https://img.shields.io/badge/MLflow-Managed-green.svg)
-![Architecture](https://img.shields.io/badge/Architecture-Production--Oriented-blueviolet.svg)
-![Status](https://img.shields.io/badge/Status-Research%20Complete-success.svg)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange.svg)
+![Keras Tuner](https://img.shields.io/badge/Keras%20Tuner-Optimization-red.svg)
+![Gradio](https://img.shields.io/badge/Gradio-Interactive%20Demo-orange)
 
-> **An MLOps-architected benchmarking framework for AIS vessel trajectory prediction, integrating Deep Learning (BiLSTM-Attention) with a reproducible MLflow pipeline.**
+> **A deep learning benchmarking framework for AIS vessel trajectory prediction, implementing BiLSTM-Attention, GRU, and LSTM architectures with automated hyperparameter tuning and an interactive web UI.**
 
 ---
 
