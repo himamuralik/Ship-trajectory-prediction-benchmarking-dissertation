@@ -129,7 +129,7 @@ chmod +x run_test_models.sh
 mlflow ui
 # Open http://localhost:5000 in your browser
 ```
----```
+---
 ## 🔬 Models Benchmarked
 
 | Model | Trajectory ADE (3hr) | Speed | Best For |
