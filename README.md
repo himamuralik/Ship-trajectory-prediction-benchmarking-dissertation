@@ -48,28 +48,24 @@ G --> I[Evaluation Artifacts]
 ```text
 Ship-trajectory-prediction-benchmarking-dissertation
 │
-├── ship_trajectory_prediction_final_code.ipynb
-│   └── Interactive visualizations & deep learning analysis
+├── ship_trajectory_prediction_final_code.ipynb  # Main analysis & visualizations
 │
 ├── project_root/
-│   ├── MLproject
-│   │   └── MLflow entry points & environment configuration
+│   ├── MLproject                  # MLflow entry points & configuration
 │   │
-│   ├── processing/
-│   │   ├── downloader.py        # AIS data ingestion
-│   │   ├── cleaner.py           # Noise filtering & SOG thresholds
-│   │   ├── interpolater.py      # Temporal regularization
-│   │   └── process.sh           # ETL pipeline orchestrator
+│   ├── processing/                # ETL Pipeline
+│   │   ├── downloader.py          # Ingests raw AIS data
+│   │   ├── cleaner.py             # Filters noise & SOG thresholds
+│   │   ├── interpolater.py        # Handles temporal regularization
+│   │   └── process.sh             # Orchestrator script
 │   │
-│   ├── experiment_scripts/
-│   │   ├── run_test_models.sh   # Batch benchmarking runs
+│   ├── experiment_scripts/        # Batch Execution
+│   │   ├── run_test_models.sh     # Benchmarking runner
 │   │   └── create_test_data.sh
 │   │
-│   └── tests/
-│       ├── create_data.py       # MLflow-tracked data generation
-│       └── fit_and_evaluate_model.py  # MLflow-tracked training
-│
-└── requirements.txt
+│   └── tests/                     # Model Training & Validation
+│       ├── create_data.py         # Data generation
+│       └── fit_and_evaluate_model.py
 ```
 ---
 
