@@ -106,28 +106,30 @@ jupyter notebook ship_trajectory_prediction_final_code.ipynb
 ```
 ### Mode 2: Reproducible MLOps Pipeline
 ```bash
-# Setup environment
+# 1. Setup Environment
+# Create the specific environment defined in the project (Python 3.7 / TF 1.14)
 conda env create -f project_root/processing_environment.yml
 
-# Verify setup
-mlflow --version
-python -c "import mlflow; print('MLflow ready')"
+# IMPORTANT: Activate the environment before running scripts
+conda activate ships_processing
 
-# Run data processing
+# 2. Run Data Processing
+# Navigate to processing module and run the ETL script
 cd project_root/processing
 chmod +x process.sh
-bash process.sh
+./process.sh
 
-# Run benchmarking
+# 3. Run Benchmarking
+# Navigate to experiments relative to processing folder
 cd ../experiment_scripts
-bash run_test_models.sh
+chmod +x run_test_models.sh
+./run_test_models.sh
 
-# View results
+# 4. View Results
 mlflow ui
-# Navigate to: http://localhost:5000
+# Open http://localhost:5000 in your browser
 ```
----
-
+---```
 ## 🔬 Models Benchmarked
 
 | Model | Trajectory ADE (3hr) | Speed | Best For |
