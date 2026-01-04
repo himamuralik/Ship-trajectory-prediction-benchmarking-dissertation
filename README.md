@@ -21,8 +21,6 @@
 
 **Real-World Impact:** Demonstrates feasibility of deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
 
-**Real-World Impact:**  
-Demonstrates feasibility of deep learning for real-time collision avoidance and automated traffic monitoring in congested ports.
 
 ---
 
@@ -107,7 +105,7 @@ pip install -r requirements.txt
 jupyter notebook ship_trajectory_prediction_final_code.ipynb
 ```
 ### Mode 2: Reproducible MLOps Pipeline
-```bashSetup 
+```bash
 # Setup environment
 conda env create -f project_root/processing_environment.yml
 
