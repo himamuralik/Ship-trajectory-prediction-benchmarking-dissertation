@@ -60,10 +60,18 @@ To reflect real AIS deployment conditions, this project explicitly evaluates mod
 > **Key Insight:** The observed degradation is expected and correct, confirming that the model responds realistically to delayed inputs and motivating latency-aware mitigation strategies.
 
 ### Latency Mitigation Considerations
-While this study focuses on benchmarking and evaluation, potential mitigation strategies include:
-- Time-shift–aware target alignment during training
-- Latency-augmented data sampling for robustness
-- State estimation (e.g., Kalman filtering) prior to neural inference
+
+This work focuses on **latency-aware evaluation and benchmarking** rather than full mitigation.
+However, the following strategies were explored or identified as natural extensions:
+
+- **Latency-aware input extrapolation (implemented):**
+  A dead-reckoning fast-forward mechanism is applied at inference time to simulate stale AIS inputs and evaluate robustness under delayed observations.
+
+- **Time-shift–aware target alignment (future work):**
+  Training-time alignment of targets to account for known input delays could further reduce temporal mismatch.
+
+- **State estimation prior to inference (future work):**
+  Classical filtering approaches (e.g., Kalman filtering) could be integrated upstream to smooth observations before neural prediction.
 
 
 ---
