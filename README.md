@@ -20,8 +20,7 @@
 | **Inference Latency** | **8.45 ms** | Validated CPU inference for real-time edge deployment (<10 ms) |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
-> **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability before real-world delay injection.  
-> ADE values are computed over **short-horizon (30–60 min)** prediction windows relevant to real-time navigation and collision avoidance.
+> > *Note: Metrics above correspond to the no-latency baseline. ADE values are computed over short-horizon (30–60 min) prediction windows used for real-time navigation.*
 
 *
 
