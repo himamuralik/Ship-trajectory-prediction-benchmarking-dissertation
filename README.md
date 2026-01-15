@@ -14,7 +14,7 @@
 | Metric | Result | Operational Relevance |
 |------|--------|----------------------|
 | **Mean Step Accuracy** | **~0.10 km (k = 1)** | Enables real-time vessel state estimation for immediate collision avoidance and tracking stabilization (10-minute horizon) |
-| **Long-Horizon Trajectory Error** | **~4.06 km (ADE, 3-hour)** | Enables coarse intent estimation for traffic monitoring and anomaly detection rather than precise collision avoidance |
+| **Long-Horizon Trajectory Error** | **~4.06 km (ADE, 3-hour)** | Enables coarse long-horizon intent estimation for traffic monitoring and anomaly detection |
 | **Inference Latency** | **~8.45 ms (CPU, amortized batch inference)** | Validates computational efficiency for high-throughput CPU inference |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
