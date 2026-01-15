@@ -118,11 +118,11 @@ Ship-trajectory-prediction-benchmarking
 
 ## 🔬 Models Benchmarked
 
-| Model                | Latency (ms) | Step-1 Error (km) | Mean Multi-Step Error (km) | Best For                          |
-| -------------------- | ------------ | ----------------- | -------------------------- | --------------------------------- |
-| **BiLSTM-Attention** | **8.45**     | **0.098**         | **0.215**                  | Complex maneuvers & turn dynamics |
-| **GRU**              | 7.12         | 0.110             | 0.245                      | Ultra-low latency edge deployment |
-| **Linear Baseline**  | 2.00         | 0.450             | >0.80                      | Latency reference only            |
+| Model                | Amortized Batch Latency (ms/sample) | Step-1 Error (km) | Mean Multi-Step Error (km) | Best For          |
+|--------------------- |------------------------------------ |------------------ |--------------------------- |---------          |
+| **BiLSTM-Attention** | ~0.1                                | **0.098**         | **0.215**                  | Complex maneuvers |
+| **GRU**              | ~0.1                                | 0.110             | 0.245                      | Lightweight       |
+| **Linear Baseline**  | ~0.05                               | 0.450             | >0.80                      | Baseline          |
 
 
 > **Evaluation Scope:** Table metrics reflect **latency-aware, longer-horizon evaluation**, while Figure 1 visualizes **no-latency baseline capability**.
