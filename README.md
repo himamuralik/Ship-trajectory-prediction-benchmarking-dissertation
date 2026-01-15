@@ -15,14 +15,16 @@
 
 | Metric | Result | Operational Relevance |
 |------|--------|----------------------|
-| **Mean Multi Step error** | **~0.10 km (k = 1)** | Enables real-time vessel state estimation for immediate collision avoidance and tracking stabilization (10-minute horizon) |
+| **Step-1 Error** | **~0.10 km (k = 1)** | Enables stabilized short-term vessel state estimation |
 | **Long-Horizon Trajectory Error** | **~7.26 km (ADE, 3-hour)** | Enables coarse long-horizon intent estimation for traffic monitoring and anomaly detection |
-| **Inference Latency** | **~8.45 ms (CPU, amortized batch inference)** | Validates computational efficiency for high-throughput CPU inference |
+| **Inference Latency** | **~0.1 ms/sample (CPU, amortized batch)** | Confirms lightweight architecture and high-throughput inference |
 | **Pipeline Efficiency** | **85% Gain** | Vectorized Pandas ETL reduced processing time from 6 hrs to 45 mins |
 
 
-> **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability.  
+> **Note:** Metrics above combine **no-latency baseline accuracy** (Step-1 Error) with **latency-aware long-horizon performance** (ADE), reflecting both model capability and real-world robustness.
 > Mean step accuracy refers to the average error at the first prediction step (k = 1), while ADE reflects accumulated long-horizon trajectory error (3-hour).
+> Single-sample (batch=1) online inference latency is higher due to Python and framework overhead, but remains negligible relative to AIS data latency.
+
 
 
 
@@ -76,7 +78,9 @@ C -->|Invalid MMSI / SOG| D[Discard]
 C -->|Valid| E[Temporal Interpolation<br/>Dask]
 E --> F[Sliding Window Sequencing]
 F --> G[BiLSTM-Attention<br/>TensorFlow]
-G --> H[Inference + Latency Check<br/><10ms CPU]
+G --> H[Inference + Latency Check<br/>CPU Inference]
+
+
 ```
 ---
 ## 📂 Repository Structure
