@@ -20,14 +20,17 @@
 | **Inference Latency** | **8.45 ms** | Validated CPU inference for real-time edge deployment (<10 ms) |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
-> *Note: Metrics above correspond to the no-latency baseline, used to establish model capability before real-world delay injection.ADE values correspond to short-horizon (30–60 min) prediction windows used for real-time navigation and collision avoidance.
+> *> **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability.  
+> ADE values are computed over **short-horizon (30–60 min)** prediction windows relevant to real-time navigation and collision avoidance.
+
 *
 
 ---
 
 ## 📊 Visual Performance
 
-**Figure 1:** *BiLSTM-Attention trajectory prediction before latency injection, demonstrating tight spatial alignment and sub-100 m immediate-horizon error.*
+**Figure 1:** Figure 1: **No-Latency Baseline** — BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.
+*
 
 ![Trajectory Plot](Trajectory.jpeg)
 *(Ground Truth in Blue vs. Prediction in Orange. The model accurately captures vessel turn dynamics and heading changes without temporal phase lag.)*
@@ -100,6 +103,8 @@ Ship-trajectory-prediction-benchmarking
 | **BiLSTM-Attention** | **8.45**     | **0.098**         | **0.215** | Complex maneuvers & turn dynamics |
 | **GRU**              | 7.12         | 0.110             | 0.245     | Ultra-low latency edge deployment |
 | **Linear Baseline**  | 2.00         | 0.450             | >0.80     | Latency reference only            |
+> **Evaluation Scope:** Table metrics reflect **latency-aware, longer-horizon evaluation**, while Figure 1 visualizes **no-latency baseline capability**.
+
 
 
 ---
