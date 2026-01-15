@@ -28,7 +28,7 @@
 
 **Figure 1:** *BiLSTM-Attention trajectory prediction before latency injection, demonstrating tight spatial alignment and sub-100 m immediate-horizon error.*
 
-![Trajectory Plot](Trajectory.png)
+![Trajectory Plot](Trajectory.jpeg)
 *(Ground Truth in Blue vs. Prediction in Orange. The model accurately captures vessel turn dynamics and heading changes without temporal phase lag.)*
 
 ---
