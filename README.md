@@ -16,7 +16,7 @@
 | Metric | Result | Operational Relevance |
 |:-------|:-------|:----------------------|
 | **Immediate Accuracy** | **~0.10 km (Step-1)** | High-precision vessel tracking for immediate collision avoidance (10-min horizon) |
-| **Trajectory Accuracy** | **~0.22 km (ADE)** | Reliable short-term forecasting with tight spatial alignment |
+| **Trajectory Accuracy** | **~~4.06 km (ADE)** | Enables coarse long-horizon intent estimation for traffic monitoring and anomaly detection |
 | **Inference Latency** | **8.45 ms** | Validated CPU inference for real-time edge deployment (<10 ms) |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
