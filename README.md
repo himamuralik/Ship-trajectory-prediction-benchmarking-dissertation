@@ -11,14 +11,13 @@
 
 ---
 
-## ⚡ Key Engineering Outcomes
-
 | Metric | Result | Operational Relevance |
-|:-------|:-------|:----------------------|
-| **Mean step accuracy** | **~0.10 km (Step-1)** | High-precision vessel tracking for immediate collision avoidance (10-min horizon) |
-| **Trajectory Accuracy** | **~~4.06 km ((3-Hour ADE))** | Enables coarse long-horizon intent estimation for traffic monitoring and anomaly detection |
-| **Inference Latency** | **8.45 ms** | Validated CPU inference for real-time edge deployment (<10 ms) |
+|------|--------|----------------------|
+| **Mean Step Accuracy** | **~0.10 km (k = 1)** | Enables real-time vessel state estimation for immediate collision avoidance and tracking stabilization (10-minute horizon) |
+| **Long-Horizon Trajectory Error** | **~4.06 km (ADE, 3-hour)** | Enables coarse intent estimation for traffic monitoring and anomaly detection rather than precise collision avoidance |
+| **Inference Latency** | **~8.45 ms (CPU, amortized batch inference)** | Validates computational efficiency for high-throughput CPU inference |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
+
 
 > > *Note: Metrics above correspond to the no-latency baseline. ADE values are computed over short-horizon (30–60 min) prediction windows used for real-time navigation.*
 
