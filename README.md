@@ -28,12 +28,14 @@
 
 ## 📊 Visual Performance
 
-**Figure 1: **No-Latency Baseline** — BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.:**
-.
+## 📊 Visual Performance
 
+**Figure 1: No-Latency Baseline —** BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.
 
 ![Trajectory Plot](Trajectory.jpeg)
+
 *(Ground Truth in Blue vs. Prediction in Orange. The model accurately captures vessel turn dynamics and heading changes without temporal phase lag.)*
+
 
 ---
 
