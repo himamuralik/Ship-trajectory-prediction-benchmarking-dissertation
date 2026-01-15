@@ -180,8 +180,6 @@ B.Tech Computer science
 
 **Research Focus:** Maritime Autonomy, MLOps, Signal Processing
 
-[LinkedIn](https://linkedin.com/in/your-profile) | [GitHub](https://github.com/your-username)
-
 ---
 
 ## 🙏 Acknowledgments
