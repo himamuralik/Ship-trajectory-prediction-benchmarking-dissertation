@@ -20,7 +20,8 @@
 | **Inference Latency** | **8.45 ms** | Validated CPU inference for real-time edge deployment (<10 ms) |
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
-> *Note: Metrics above correspond to the no-latency baseline, used to establish model capability before real-world delay injection.*
+> *Note: Metrics above correspond to the no-latency baseline, used to establish model capability before real-world delay injection.ADE values correspond to short-horizon (30–60 min) prediction windows used for real-time navigation and collision avoidance.
+*
 
 ---
 
@@ -45,6 +46,13 @@ To reflect real AIS deployment conditions, this project explicitly evaluates mod
     * Error growth per future step accelerates, validating temporal sensitivity.
 
 > **Key Insight:** The observed degradation is expected and correct, confirming that the model responds realistically to delayed inputs and motivating latency-aware mitigation strategies.
+
+### Latency Mitigation Considerations
+While this study focuses on benchmarking and evaluation, potential mitigation strategies include:
+- Time-shift–aware target alignment during training
+- Latency-augmented data sampling for robustness
+- State estimation (e.g., Kalman filtering) prior to neural inference
+
 
 ---
 
@@ -158,18 +166,6 @@ chmod +x run_test_models.sh
 mlflow ui
 # Open http://localhost:5000 in your browser
 ```
----
-## 🔬 Models Benchmarked
-
-| Model | Trajectory ADE (3hr) | Speed | Best For |
-|-------|----------------------|-------|----------|
-| **BiLSTM-Attention** | **4.06 km** | ~10ms | Complex maneuvers |
-| **GRU** | 4.12 km | **~8ms** | Low-latency / edge |
-| **Linear Regression** | > 8.00 km | 2ms | Baseline reference |
-Note: Inference speeds measured on CPU (Intel i7) to simulate edge gateway performance.
-
----
-
 ---
 
 ## 👤 Author
