@@ -15,7 +15,7 @@
 
 | Metric | Result | Operational Relevance |
 |------|--------|----------------------|
-| **Step-1 Error** | **~0.10 km (k = 1)** | Enables stabilized short-term vessel state estimation |
+| **Mean Multi-Step Error** | **~0.215 km** | Average prediction error across the forecast horizon |
 | **Long-Horizon Trajectory Error** | **~7.26 km (ADE, 3-hour)** | Enables coarse long-horizon intent estimation for traffic monitoring and anomaly detection |
 | **Inference Latency** | **~0.1 ms/sample (CPU, amortized batch)** | Confirms lightweight architecture and high-throughput inference |
 | **Pipeline Efficiency** | **85% Gain** | Vectorized Pandas ETL reduced processing time from 6 hrs to 45 mins |
