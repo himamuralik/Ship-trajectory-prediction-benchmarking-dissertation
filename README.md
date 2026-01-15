@@ -29,7 +29,7 @@
 
 ## 📊 Visual Performance
 
-**Figure 1: **No-Latency Baseline** — BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.
+**Figure 1: **No-Latency Baseline** — BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.:**
 .
 *
 
