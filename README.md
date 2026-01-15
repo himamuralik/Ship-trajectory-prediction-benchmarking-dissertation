@@ -1,4 +1,4 @@
-# 🚢 Maritime Trajectory Prediction: Benchmarking Suite
+# 🚢 Maritime Trajectory Prediction
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange.svg)
