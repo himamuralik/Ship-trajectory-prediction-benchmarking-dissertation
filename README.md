@@ -19,7 +19,9 @@
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
 
-> > *Note: Metrics above correspond to the no-latency baseline. ADE values are computed over short-horizon (30–60 min) prediction windows used for real-time navigation.*
+> > > **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability.  
+> Mean Step Accuracy refers to the average error at the first prediction step (k = 1), while ADE reflects accumulated long-horizon trajectory error.
+
 
 *
 
