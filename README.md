@@ -10,6 +10,8 @@
 > Implements BiLSTM-Attention, GRU, and baseline models with reproducible MLOps pipelines and rigorous temporal evaluation.
 
 ---
+## ⚡ Key Engineering Outcomes
+
 
 | Metric | Result | Operational Relevance |
 |------|--------|----------------------|
@@ -19,19 +21,21 @@
 | **Pipeline Efficiency** | **85% Gain** | Dask/Parquet ETL reduced processing time from 6 hrs to 45 mins |
 
 
-> > >> **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability.  
+> **Note:** Metrics above correspond to the **no-latency baseline**, used to establish model capability.  
 > Mean step accuracy refers to the average error at the first prediction step (k = 1), while ADE reflects accumulated long-horizon trajectory error (3-hour).
 
 
 
-*
+
+
 
 ---
 
 
 ## 📊 Visual Performance
 
-**Figure 1: No-Latency Baseline —** BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m immediate-horizon error.
+**Figure 1: No-Latency Baseline —** BiLSTM-Attention trajectory prediction demonstrating tight spatial alignment and sub-100 m mean step (k = 1) error
+
 
 ![Trajectory Plot](Trajectory.jpeg)
 
@@ -101,11 +105,11 @@ Ship-trajectory-prediction-benchmarking
 ---
 
 ## 🔬 Models Benchmarked
-| Model                | Latency (ms) | Step-1 Error (km) | ADE (km)  | Best For                          |
-| -------------------- | ------------ | ----------------- | --------- | --------------------------------- |
-| **BiLSTM-Attention** | **8.45**     | **0.098**         | **0.215** | Complex maneuvers & turn dynamics |
-| **GRU**              | 7.12         | 0.110             | 0.245     | Ultra-low latency edge deployment |
-| **Linear Baseline**  | 2.00         | 0.450             | >0.80     | Latency reference only            |
+| Model                | Latency (ms) | Step-1 Error (km) | Mean Step Error (km)   | Best For                          |
+| -------------------- | ------------ | ----------------- | ---------              | --------------------------------- |
+| **BiLSTM-Attention** | **8.45**     | **0.098**         | **0.215**              | Complex maneuvers & turn dynamics |
+| **GRU**              | 7.12         | 0.110             | 0.245                  | Ultra-low latency edge deployment |
+| **Linear Baseline**  | 2.00         | 0.450             | >0.80                  | Latency reference only            |
 
 > **Evaluation Scope:** Table metrics reflect **latency-aware, longer-horizon evaluation**, while Figure 1 visualizes **no-latency baseline capability**.
 
