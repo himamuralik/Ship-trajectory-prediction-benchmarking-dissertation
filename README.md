@@ -26,7 +26,6 @@
 
 ---
 
-## 📊 Visual Performance
 
 ## 📊 Visual Performance
 
